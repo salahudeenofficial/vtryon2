@@ -183,7 +183,7 @@ def main():
         ]()
         ksampler = KSampler()
         vaedecode = VAEDecode()
-        imageconcatmulti = NODE_CLASS_MAPPINGS["ImageConcatMulti"]()
+        # imageconcatmulti = NODE_CLASS_MAPPINGS["ImageConcatMulti"]()
         saveimage = SaveImage()
 
         for q in range(10):
