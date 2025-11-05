@@ -3,6 +3,8 @@ import random
 import sys
 from typing import Sequence, Mapping, Any, Union
 import torch
+import glob
+from pathlib import Path
 
 
 def get_value_at_index(obj: Union[Sequence, Mapping], index: int) -> Any:
@@ -116,15 +118,65 @@ from nodes import (
 )
 
 
+def get_image_pairs(test_set_path: str, gender: str):
+    """
+    Get matching image pairs from cloth and masked_person folders.
+    Returns list of tuples: (cloth_path, masked_person_path, number)
+    """
+    cloth_dir = os.path.join(test_set_path, gender, "cloth")
+    masked_person_dir = os.path.join(test_set_path, gender, "masked_person")
+    
+    pairs = []
+    
+    # Get all cloth images
+    cloth_files = {}
+    for ext in ['*.png', '*.jpg', '*.jpeg']:
+        for cloth_path in glob.glob(os.path.join(cloth_dir, ext)):
+            base_name = os.path.splitext(os.path.basename(cloth_path))[0]
+            cloth_files[base_name] = cloth_path
+    
+    # Match with masked_person images
+    for ext in ['*.png', '*.jpg', '*.jpeg']:
+        for masked_path in glob.glob(os.path.join(masked_person_dir, ext)):
+            base_name = os.path.splitext(os.path.basename(masked_path))[0]
+            if base_name in cloth_files:
+                pairs.append((cloth_files[base_name], masked_path, base_name))
+    
+    # Sort by number
+    pairs.sort(key=lambda x: int(x[2]) if x[2].isdigit() else 0)
+    
+    return pairs
+
+
 def main():
     """
-    Main workflow function - executes serially after minimal custom node loading.
-    Uses minimal async setup (asyncio.run) instead of full server infrastructure.
+    Main workflow function - processes test dataset images.
+    Processes male first, then female, generating 32 total outputs.
     """
     # Load custom nodes with minimal async setup (no server needed)
     import_custom_nodes_minimal()
     
+    # Test dataset path
+    test_set_path = "/home/fashionx/Desktop/catvton-flux (copy)/test_set"
+    
+    # Get all image pairs
+    male_pairs = get_image_pairs(test_set_path, "male")
+    female_pairs = get_image_pairs(test_set_path, "female")
+    
+    print(f"Found {len(male_pairs)} male pairs and {len(female_pairs)} female pairs")
+    print(f"Total: {len(male_pairs) + len(female_pairs)} pairs to process")
+    
+    # Combine: male first, then female
+    all_pairs = []
+    for cloth_path, masked_path, number in male_pairs:
+        all_pairs.append(("male", cloth_path, masked_path, number))
+    for cloth_path, masked_path, number in female_pairs:
+        all_pairs.append(("female", cloth_path, masked_path, number))
+    
+    print(f"Processing {len(all_pairs)} pairs (target: 32 outputs)")
+    
     with torch.inference_mode():
+        # Load models once
         unetloader = UNETLoader()
         unetloader_37 = unetloader.load_unet(
             unet_name="qwen_image_edit_2509_fp8_e4m3fn.safetensors",
@@ -142,38 +194,14 @@ def main():
         vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
 
         loadimage = LoadImage()
-        #person_image
-        loadimage_78 = loadimage.load_image(
-            image="masked_person.png"
-        )
-
         imagescaletototalpixels = NODE_CLASS_MAPPINGS["ImageScaleToTotalPixels"]()
-        imagescaletototalpixels_93 = imagescaletototalpixels.EXECUTE_NORMALIZED(
-            upscale_method="lanczos",
-            megapixels=1,
-            image=get_value_at_index(loadimage_78, 0),
-        )
-
         vaeencode = VAEEncode()
-        vaeencode_88 = vaeencode.encode(
-            pixels=get_value_at_index(imagescaletototalpixels_93, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
-        )
-
+        
         loraloadermodelonly = LoraLoaderModelOnly()
         loraloadermodelonly_89 = loraloadermodelonly.load_lora_model_only(
             lora_name="Qwen-Image-Lightning-4steps-V2.0.safetensors",
             strength_model=1,
             model=get_value_at_index(unetloader_37, 0),
-        )
-
-        loadimage_106 = loadimage.load_image(
-            image="cloth.png"
-        )
-
-        emptysd3latentimage = NODE_CLASS_MAPPINGS["EmptySD3LatentImage"]()
-        emptysd3latentimage_112 = emptysd3latentimage.EXECUTE_NORMALIZED(
-            width=1024, height=1024, batch_size=1
         )
 
         modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
@@ -183,70 +211,105 @@ def main():
         ]()
         ksampler = KSampler()
         vaedecode = VAEDecode()
-        # imageconcatmulti = NODE_CLASS_MAPPINGS["ImageConcatMulti"]()
         saveimage = SaveImage()
 
-        for q in range(10):
-            modelsamplingauraflow_66 = modelsamplingauraflow.patch_aura(
-                shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)
-            )
+        # Process each pair
+        processed_count = 0
+        for gender, cloth_path, masked_person_path, number in all_pairs:
+            if processed_count >= 32:
+                print(f"Reached target of 32 outputs. Stopping.")
+                break
+                
+            print(f"\nProcessing {gender} pair #{number} ({processed_count + 1}/32)")
+            print(f"  Cloth: {cloth_path}")
+            print(f"  Person: {masked_person_path}")
+            
+            try:
+                # Load masked person image
+                loadimage_78 = loadimage.load_image(image=masked_person_path)
+                
+                # Scale image
+                imagescaletototalpixels_93 = imagescaletototalpixels.EXECUTE_NORMALIZED(
+                    upscale_method="lanczos",
+                    megapixels=1,
+                    image=get_value_at_index(loadimage_78, 0),
+                )
+                
+                # Encode to latent
+                vaeencode_88 = vaeencode.encode(
+                    pixels=get_value_at_index(imagescaletototalpixels_93, 0),
+                    vae=get_value_at_index(vaeloader_39, 0),
+                )
+                
+                # Load cloth image
+                loadimage_106 = loadimage.load_image(image=cloth_path)
+                
+                # Apply model sampling
+                modelsamplingauraflow_66 = modelsamplingauraflow.patch_aura(
+                    shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)
+                )
 
-            cfgnorm_75 = cfgnorm.EXECUTE_NORMALIZED(
-                strength=1, model=get_value_at_index(modelsamplingauraflow_66, 0)
-            )
+                cfgnorm_75 = cfgnorm.EXECUTE_NORMALIZED(
+                    strength=1, model=get_value_at_index(modelsamplingauraflow_66, 0)
+                )
 
-            textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
-                prompt="by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1.",
-                clip=get_value_at_index(cliploader_38, 0),
-                vae=get_value_at_index(vaeloader_39, 0),
-                image1=get_value_at_index(imagescaletototalpixels_93, 0),
-                image2=get_value_at_index(loadimage_106, 0),
-            )
-
-            textencodeqwenimageeditplus_110 = (
-                textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
-                    prompt="",
+                # Encode prompts
+                textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
+                    prompt="by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1.",
                     clip=get_value_at_index(cliploader_38, 0),
                     vae=get_value_at_index(vaeloader_39, 0),
                     image1=get_value_at_index(imagescaletototalpixels_93, 0),
                     image2=get_value_at_index(loadimage_106, 0),
                 )
-            )
 
-            ksampler_3 = ksampler.sample(
-                seed=random.randint(1, 2**64),
-                steps=4,
-                cfg=1,
-                sampler_name="euler",
-                scheduler="simple",
-                denoise=1,
-                model=get_value_at_index(cfgnorm_75, 0),
-                positive=get_value_at_index(textencodeqwenimageeditplus_111, 0),
-                negative=get_value_at_index(textencodeqwenimageeditplus_110, 0),
-                latent_image=get_value_at_index(vaeencode_88, 0),
-            )
+                textencodeqwenimageeditplus_110 = (
+                    textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
+                        prompt="",
+                        clip=get_value_at_index(cliploader_38, 0),
+                        vae=get_value_at_index(vaeloader_39, 0),
+                        image1=get_value_at_index(imagescaletototalpixels_93, 0),
+                        image2=get_value_at_index(loadimage_106, 0),
+                    )
+                )
 
-            vaedecode_8 = vaedecode.decode(
-                samples=get_value_at_index(ksampler_3, 0),
-                vae=get_value_at_index(vaeloader_39, 0),
-            )
+                # Sample
+                ksampler_3 = ksampler.sample(
+                    seed=random.randint(1, 2**64),
+                    steps=4,
+                    cfg=1,
+                    sampler_name="euler",
+                    scheduler="simple",
+                    denoise=1,
+                    model=get_value_at_index(cfgnorm_75, 0),
+                    positive=get_value_at_index(textencodeqwenimageeditplus_111, 0),
+                    negative=get_value_at_index(textencodeqwenimageeditplus_110, 0),
+                    latent_image=get_value_at_index(vaeencode_88, 0),
+                )
 
-            # imageconcatmulti_389 = imageconcatmulti.combine(
-            #     inputcount=3,
-            #     direction="right",
-            #     match_image_size=False,
-            #     Update_inputs=None,
-            #     image_1=get_value_at_index(loadimage_78, 0),
-            #     image_2=get_value_at_index(loadimage_106, 0),
-            #     image_3=get_value_at_index(vaedecode_8, 0),
-            # )
+                # Decode
+                vaedecode_8 = vaedecode.decode(
+                    samples=get_value_at_index(ksampler_3, 0),
+                    vae=get_value_at_index(vaeloader_39, 0),
+                )
 
-            saveimage_60 = saveimage.save_images(
-                filename_prefix="ComfyUI",
-                images=get_value_at_index(vaedecode_8, 0),
-            )
+                # Save with descriptive filename
+                output_filename = f"test_{gender}_{number}"
+                saveimage_60 = saveimage.save_images(
+                    filename_prefix=output_filename,
+                    images=get_value_at_index(vaedecode_8, 0),
+                )
+                
+                processed_count += 1
+                print(f"  ✓ Saved: {output_filename}")
+                
+            except Exception as e:
+                print(f"  ✗ Error processing {gender} pair #{number}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print(f"\n\nCompleted! Processed {processed_count} pairs successfully.")
 
 
 if __name__ == "__main__":
     main()
-
