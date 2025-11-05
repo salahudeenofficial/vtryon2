@@ -156,8 +156,9 @@ def main():
     # Load custom nodes with minimal async setup (no server needed)
     import_custom_nodes_minimal()
     
-    # Test dataset path
-    test_set_path = "/home/fashionx/Desktop/catvton-flux (copy)/test_set"
+    # Test dataset path - expects test_set folder next to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    test_set_path = os.path.join(script_dir, "test_set")
     
     # Get all image pairs
     male_pairs = get_image_pairs(test_set_path, "male")
