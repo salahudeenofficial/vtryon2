@@ -5,6 +5,7 @@ import torch
 from pathlib import Path
 from datetime import datetime
 import time
+import importlib.util
 
 from config import Config
 from errors import (
@@ -15,9 +16,7 @@ from errors import (
     ScalingFailedError,
     ComfyUIInitializationError
 )
-# Import from local utils module (use relative import to avoid conflicts)
-import importlib.util
-from pathlib import Path
+# Import from local utils module (use importlib to avoid conflicts with ComfyUI utils)
 
 # Get the directory of this file
 _service_dir = Path(__file__).parent
