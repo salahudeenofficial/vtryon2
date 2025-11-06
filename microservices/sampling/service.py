@@ -121,26 +121,37 @@ def load_input_tensor(input_value: Union[str, torch.Tensor], description: str) -
         raise InvalidTensorFormatError(f"{description} must be a file path (str) or torch.Tensor, got {type(input_value)}")
 
 
-def prepare_conditioning(conditioning_value: Union[str, torch.Tensor, list, tuple]) -> Union[list, tuple]:
+def prepare_conditioning(conditioning_value: Union[str, torch.Tensor, list, tuple]) -> list:
     """
     Prepare conditioning input for sampler.
-    Sampler expects format: [tensor, metadata_dict] or just [tensor]
+    Sampler expects format: [[tensor, metadata_dict]] (list of conditioning items)
     
     Args:
         conditioning_value: File path, tensor, or already formatted conditioning
     
     Returns:
-        Conditioning in format expected by sampler
+        Conditioning in format expected by sampler: [[tensor, metadata_dict]]
     """
-    # If already in list/tuple format, return as-is
+    # If already in list/tuple format, check if it's already the right format
     if isinstance(conditioning_value, (list, tuple)):
-        return conditioning_value
+        # Check if it's already a list of conditioning items [[tensor, dict]]
+        if len(conditioning_value) > 0:
+            first_item = conditioning_value[0]
+            # If first item is a list/tuple, it's already in the right format
+            if isinstance(first_item, (list, tuple)):
+                return list(conditioning_value)  # Already correct format
+            # If first item is a tensor, wrap the whole thing
+            elif isinstance(first_item, torch.Tensor):
+                # It's [tensor, ...] format, wrap it
+                return [list(conditioning_value)]
+        # Empty list, return as-is
+        return list(conditioning_value)
     
     # Load tensor if needed
     tensor = load_input_tensor(conditioning_value, "Conditioning")
     
-    # Return in format [tensor, {}] for sampler
-    return [tensor, {}]
+    # Return in format [[tensor, {}]] for sampler (list of conditioning items)
+    return [[tensor, {}]]
 
 
 def prepare_latent_image(latent_value: Union[str, torch.Tensor, dict]) -> dict:
