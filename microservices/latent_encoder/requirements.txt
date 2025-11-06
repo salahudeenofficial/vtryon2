@@ -1,0 +1,15 @@
+# Additional packages required for latent_encoder microservice
+# (ComfyUI base requirements are already in parent ComfyUI/requirements.txt)
+
+# Kafka integration
+confluent-kafka>=2.3.0
+
+# Configuration management
+python-dotenv>=1.0.0
+
+# Data validation (for Kafka messages)
+pydantic>=2.0.0
+
+# Note: All other dependencies (torch, torchvision, numpy, Pillow, etc.)
+# should be installed from the parent ComfyUI/requirements.txt
+# This microservice uses ComfyUI files directly, so base requirements are needed

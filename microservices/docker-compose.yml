@@ -1,0 +1,157 @@
+# Docker Compose for Local Development
+
+version: '3.8'
+
+services:
+  # Kafka and Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # Schema Registry (for Avro)
+  schema-registry:
+    image: confluentinc/cp-schema-registry:latest
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+
+  # Microservices
+  latent-encoder:
+    build: ./latent_encoder
+    ports:
+      - "8001:8080"
+    environment:
+      - MODE=rest
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_DIR=/models
+      - OUTPUT_DIR=/output
+    volumes:
+      - ./models:/models:ro
+      - ./output:/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  text-encoder:
+    build: ./text_encoder
+    ports:
+      - "8002:8080"
+    environment:
+      - MODE=rest
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_DIR=/models
+    volumes:
+      - ./models:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  sampling:
+    build: ./sampling
+    ports:
+      - "8003:8080"
+    environment:
+      - MODE=rest
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_DIR=/models
+    volumes:
+      - ./models:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  decoding:
+    build: ./decoding
+    ports:
+      - "8004:8080"
+    environment:
+      - MODE=rest
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_DIR=/models
+      - OUTPUT_DIR=/output
+    volumes:
+      - ./models:/models:ro
+      - ./output:/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Triton Inference Server (Optional)
+  triton:
+    image: nvcr.io/nvidia/tritonserver:latest-py3
+    ports:
+      - "8000:8000"  # HTTP
+      - "8001:8001"  # gRPC
+      - "8002:8002"  # Metrics
+    command:
+      - tritonserver
+      - --model-repository=/models/triton_models
+      - --strict-model-config=false
+    volumes:
+      - ./triton_models:/models/triton_models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Workflow Orchestrator (Optional)
+  orchestrator:
+    build: ./orchestrator
+    depends_on:
+      - kafka
+      - latent-encoder
+      - text-encoder
+      - sampling
+      - decoding
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LATENT_ENCODER_URL=http://latent-encoder:8080
+      - TEXT_ENCODER_URL=http://text-encoder:8080
+      - SAMPLING_URL=http://sampling:8080
+      - DECODING_URL=http://decoding:8080
+    volumes:
+      - ./output:/output
+
+networks:
+  default:
+    driver: bridge
+
