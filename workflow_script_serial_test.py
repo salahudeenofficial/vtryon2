@@ -190,22 +190,28 @@ def main():
             pixels=get_value_at_index(imagescaletototalpixels_93, 0),
             vae=get_value_at_index(vaeloader_39, 0),
         )
-        img1_enc = get_value_at_index(vaeencode_88, 0)
+        img1_enc_raw = get_value_at_index(vaeencode_88, 0)
         
-        # Debug: Check what type img1_enc is
-        if isinstance(img1_enc, dict):
-            print(f"  Debug: img1_enc is dict with keys: {list(img1_enc.keys())}")
-            # Try to extract the actual tensor
-            if "samples" in img1_enc:
-                img1_enc = img1_enc["samples"]
-            elif "latent" in img1_enc:
-                img1_enc = img1_enc["latent"]
-            elif len(img1_enc) == 1:
-                img1_enc = list(img1_enc.values())[0]
+        # Extract tensor for saving, but keep original format for sampler
+        # The sampler expects a dict with "samples" key, so we need to preserve that
+        img1_enc_for_sampler = img1_enc_raw  # Keep original format for sampler
+        img1_enc_tensor = img1_enc_raw  # Will extract tensor for saving
         
-        # Save latent encoder output
+        # Extract tensor for saving
+        if isinstance(img1_enc_tensor, dict):
+            if "samples" in img1_enc_tensor:
+                img1_enc_tensor = img1_enc_tensor["samples"]
+            elif "latent" in img1_enc_tensor:
+                img1_enc_tensor = img1_enc_tensor["latent"]
+            elif len(img1_enc_tensor) == 1:
+                img1_enc_tensor = list(img1_enc_tensor.values())[0]
+        
+        if isinstance(img1_enc_tensor, (list, tuple)):
+            img1_enc_tensor = img1_enc_tensor[0]
+        
+        # Save latent encoder output (tensor only)
         save_tensor(
-            img1_enc,
+            img1_enc_tensor,
             str(output_dir / "latent_encoder_output.pt"),
             "Latent Encoder Output"
         )
@@ -304,6 +310,12 @@ def main():
         
         # Use fixed seed for reproducibility
         test_seed = 12345
+        
+        # Ensure img1_enc is in the format expected by sampler (dict with "samples" key)
+        if not isinstance(img1_enc_for_sampler, dict):
+            # Wrap tensor in dict format expected by sampler
+            img1_enc_for_sampler = {"samples": img1_enc_for_sampler}
+        
         ksampler_3 = ksampler.sample(
             seed=test_seed,
             steps=4,
@@ -314,7 +326,7 @@ def main():
             model=get_value_at_index(cfgnorm_75, 0),
             positive=t_en_out1,
             negative=t_en_out2,
-            latent_image=img1_enc,
+            latent_image=img1_enc_for_sampler,
         )
         k_out = get_value_at_index(ksampler_3, 0)
         
