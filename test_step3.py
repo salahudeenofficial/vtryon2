@@ -41,7 +41,7 @@ def get_actual_tensor_from_service(
     positive_encoding_path: str = "test_outputs/text_encoder_positive_output.pt",
     negative_encoding_path: str = "test_outputs/text_encoder_negative_output.pt",
     latent_image_path: str = "test_outputs/latent_encoder_output.pt",
-    seed: int = 12345,
+    seed: int = 724723345395306,
     steps: int = 4,
     cfg: float = 1.0,
     sampler_name: str = "euler",

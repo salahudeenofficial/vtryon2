@@ -326,7 +326,7 @@ def main():
         )
         
         # Use fixed seed for reproducibility
-        test_seed = 12345
+        test_seed = 724723345395306
         
         # Ensure img1_enc is in the format expected by sampler (dict with "samples" key)
         if not isinstance(img1_enc_for_sampler, dict):
