@@ -250,14 +250,20 @@ def encode_image_to_latent(
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }
         
-        return {
+        result = {
             "status": "success",
             "request_id": request_id,
             "latent_file_path": latent_file_path,
             "latent_shape": latent_shape,
-            "latent_tensor": latent if not save_tensor else None,  # Return tensor if not saving
             "metadata": metadata
         }
+        
+        # Always include tensor in result (for testing/comparison)
+        # When save_tensor=False, we return the tensor directly
+        # When save_tensor=True, we still include it for comparison purposes
+        result["latent_tensor"] = latent
+        
+        return result
         
     except Exception as e:
         processing_time_ms = int((time.time() - start_time) * 1000)
