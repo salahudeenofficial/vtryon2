@@ -104,6 +104,8 @@ def save_tensor(tensor, filepath: str, description: str):
             tensor = tensor["samples"]
         elif "latent" in tensor:
             tensor = tensor["latent"]
+        elif "cond" in tensor:
+            tensor = tensor["cond"]
         elif "result" in tensor:
             tensor = tensor["result"][0] if isinstance(tensor["result"], (list, tuple)) else tensor["result"]
         elif len(tensor) == 1:
@@ -112,12 +114,27 @@ def save_tensor(tensor, filepath: str, description: str):
         else:
             raise ValueError(f"Cannot extract tensor from dict: {list(tensor.keys())}")
     
+    # Handle list/tuple - extract first element or concatenate if needed
     if isinstance(tensor, (list, tuple)):
-        tensor = tensor[0]
+        if len(tensor) == 0:
+            raise ValueError("Empty list/tuple, cannot extract tensor")
+        elif len(tensor) == 1:
+            tensor = tensor[0]
+        else:
+            # Multiple elements - try to extract tensor from each
+            # For text encoder, it might be a list of tensors
+            print(f"  Warning: Got list/tuple with {len(tensor)} elements, using first element")
+            tensor = tensor[0]
+            # If first element is still not a tensor, try to extract
+            if isinstance(tensor, dict):
+                if "cond" in tensor:
+                    tensor = tensor["cond"]
+                elif len(tensor) == 1:
+                    tensor = list(tensor.values())[0]
     
     # Ensure it's a tensor
     if not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"Expected torch.Tensor, got {type(tensor)}")
+        raise TypeError(f"Expected torch.Tensor, got {type(tensor)}. Value: {tensor}")
     
     torch.save(tensor, filepath)
     print(f"✓ Saved {description}: {filepath}")
@@ -228,18 +245,32 @@ def main():
         t_en_out1 = get_value_at_index(textencodeqwenimageeditplus_111, 0)
         t_en_out2 = get_value_at_index(textencodeqwenimageeditplus_110, 0)
         
-        # Handle dict outputs from text encoder
+        # Handle dict/list outputs from text encoder
         if isinstance(t_en_out1, dict):
             if "cond" in t_en_out1:
                 t_en_out1 = t_en_out1["cond"]
             elif len(t_en_out1) == 1:
                 t_en_out1 = list(t_en_out1.values())[0]
         
+        if isinstance(t_en_out1, (list, tuple)):
+            if len(t_en_out1) > 0:
+                t_en_out1 = t_en_out1[0]
+                # If still a dict, extract further
+                if isinstance(t_en_out1, dict) and "cond" in t_en_out1:
+                    t_en_out1 = t_en_out1["cond"]
+        
         if isinstance(t_en_out2, dict):
             if "cond" in t_en_out2:
                 t_en_out2 = t_en_out2["cond"]
             elif len(t_en_out2) == 1:
                 t_en_out2 = list(t_en_out2.values())[0]
+        
+        if isinstance(t_en_out2, (list, tuple)):
+            if len(t_en_out2) > 0:
+                t_en_out2 = t_en_out2[0]
+                # If still a dict, extract further
+                if isinstance(t_en_out2, dict) and "cond" in t_en_out2:
+                    t_en_out2 = t_en_out2["cond"]
         
         # Save text encoder outputs
         save_tensor(
