@@ -51,6 +51,7 @@ def import_custom_nodes_minimal() -> None:
 def setup_comfyui() -> None:
     """Setup ComfyUI paths and initialize."""
     comfyui_path = Path(__file__).parent / "comfyui"
+    microservice_dir = Path(__file__).parent
     
     if not comfyui_path.exists():
         raise ComfyUIInitializationError(f"ComfyUI directory not found: {comfyui_path}")
@@ -60,6 +61,28 @@ def setup_comfyui() -> None:
     
     # Add extra model paths
     add_extra_model_paths(comfyui_path)
+    
+    # Configure folder_paths to use microservice's models directory
+    # This must be done after ComfyUI is added to sys.path
+    import folder_paths
+    
+    # Get microservice models directory (absolute path)
+    microservice_models_dir = (microservice_dir / Config.model_dir).resolve()
+    
+    # Add microservice models directory to folder_paths
+    # This adds it as an additional search path (not replacing the default)
+    if microservice_models_dir.exists():
+        # Add VAE path
+        vae_path = microservice_models_dir / "vae"
+        if vae_path.exists():
+            folder_paths.add_model_folder_path("vae", str(vae_path), is_default=True)
+            print(f"Added VAE model path: {vae_path}")
+        
+        # Add other model paths if they exist
+        for model_type in ["checkpoints", "loras", "clip", "text_encoders", "diffusion_models"]:
+            model_path = microservice_models_dir / model_type
+            if model_path.exists():
+                folder_paths.add_model_folder_path(model_type, str(model_path), is_default=False)
     
     # Import custom nodes
     import_custom_nodes_minimal()
