@@ -15,13 +15,25 @@ from errors import (
     ScalingFailedError,
     ComfyUIInitializationError
 )
-from utils import (
-    get_value_at_index,
-    add_comfyui_directory_to_sys_path,
-    add_extra_model_paths,
-    generate_request_id,
-    ensure_directory_exists
-)
+# Import from local utils module (use relative import to avoid conflicts)
+import importlib.util
+from pathlib import Path
+
+# Get the directory of this file
+_service_dir = Path(__file__).parent
+_utils_path = _service_dir / "utils.py"
+
+# Load utils module from local file
+_utils_spec = importlib.util.spec_from_file_location("latent_encoder_utils", _utils_path)
+_latent_encoder_utils = importlib.util.module_from_spec(_utils_spec)
+_utils_spec.loader.exec_module(_latent_encoder_utils)
+
+# Import functions from local utils
+get_value_at_index = _latent_encoder_utils.get_value_at_index
+add_comfyui_directory_to_sys_path = _latent_encoder_utils.add_comfyui_directory_to_sys_path
+add_extra_model_paths = _latent_encoder_utils.add_extra_model_paths
+generate_request_id = _latent_encoder_utils.generate_request_id
+ensure_directory_exists = _latent_encoder_utils.ensure_directory_exists
 
 
 def import_custom_nodes_minimal() -> None:
