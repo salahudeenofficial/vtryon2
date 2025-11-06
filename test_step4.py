@@ -90,14 +90,14 @@ def get_actual_tensor_from_service(
                     print(f"     - {alt_path}")
                 return None
         
-        # Call service with save_image=False to get tensor directly
+        # Call service with save_image=True to save image and get tensor
         result = decode_latent_to_image(
             latent=latent_path,
             vae_model_name=vae_model_name,
             output_filename="test_output",
             output_dir=output_dir,
             output_format="jpg",
-            save_image=False  # Don't save, just return tensor
+            save_image=True  # Save image file
         )
         
         if result["status"] != "success":
@@ -110,6 +110,12 @@ def get_actual_tensor_from_service(
         if tensor is None:
             print("❌ Service did not return image_tensor")
             return None
+        
+        # Print image file info if saved
+        if result.get("image_file_path"):
+            print(f"✓ Image saved to: {result['image_file_path']}")
+            if result.get("file_size"):
+                print(f"  File size: {result['file_size']} bytes")
         
         print(f"✓ Got actual tensor from service")
         print(f"  Shape: {tensor.shape}")
