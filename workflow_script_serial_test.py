@@ -96,9 +96,33 @@ from nodes import (
 def save_tensor(tensor, filepath: str, description: str):
     """Save tensor to file."""
     Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Handle case where tensor might be wrapped in a dict or list
+    if isinstance(tensor, dict):
+        # Try to extract tensor from dict
+        if "samples" in tensor:
+            tensor = tensor["samples"]
+        elif "latent" in tensor:
+            tensor = tensor["latent"]
+        elif "result" in tensor:
+            tensor = tensor["result"][0] if isinstance(tensor["result"], (list, tuple)) else tensor["result"]
+        elif len(tensor) == 1:
+            # If dict has single key, use its value
+            tensor = list(tensor.values())[0]
+        else:
+            raise ValueError(f"Cannot extract tensor from dict: {list(tensor.keys())}")
+    
+    if isinstance(tensor, (list, tuple)):
+        tensor = tensor[0]
+    
+    # Ensure it's a tensor
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Expected torch.Tensor, got {type(tensor)}")
+    
     torch.save(tensor, filepath)
     print(f"✓ Saved {description}: {filepath}")
     print(f"  Shape: {tensor.shape}")
+    print(f"  Dtype: {tensor.dtype}")
 
 
 def main():
@@ -151,6 +175,17 @@ def main():
         )
         img1_enc = get_value_at_index(vaeencode_88, 0)
         
+        # Debug: Check what type img1_enc is
+        if isinstance(img1_enc, dict):
+            print(f"  Debug: img1_enc is dict with keys: {list(img1_enc.keys())}")
+            # Try to extract the actual tensor
+            if "samples" in img1_enc:
+                img1_enc = img1_enc["samples"]
+            elif "latent" in img1_enc:
+                img1_enc = img1_enc["latent"]
+            elif len(img1_enc) == 1:
+                img1_enc = list(img1_enc.values())[0]
+        
         # Save latent encoder output
         save_tensor(
             img1_enc,
@@ -192,6 +227,19 @@ def main():
         
         t_en_out1 = get_value_at_index(textencodeqwenimageeditplus_111, 0)
         t_en_out2 = get_value_at_index(textencodeqwenimageeditplus_110, 0)
+        
+        # Handle dict outputs from text encoder
+        if isinstance(t_en_out1, dict):
+            if "cond" in t_en_out1:
+                t_en_out1 = t_en_out1["cond"]
+            elif len(t_en_out1) == 1:
+                t_en_out1 = list(t_en_out1.values())[0]
+        
+        if isinstance(t_en_out2, dict):
+            if "cond" in t_en_out2:
+                t_en_out2 = t_en_out2["cond"]
+            elif len(t_en_out2) == 1:
+                t_en_out2 = list(t_en_out2.values())[0]
         
         # Save text encoder outputs
         save_tensor(
@@ -239,6 +287,15 @@ def main():
         )
         k_out = get_value_at_index(ksampler_3, 0)
         
+        # Handle dict outputs from sampler
+        if isinstance(k_out, dict):
+            if "samples" in k_out:
+                k_out = k_out["samples"]
+            elif "latent" in k_out:
+                k_out = k_out["latent"]
+            elif len(k_out) == 1:
+                k_out = list(k_out.values())[0]
+        
         # Save sampling output
         save_tensor(
             k_out,
@@ -253,6 +310,15 @@ def main():
             vae=get_value_at_index(vaeloader_39, 0),
         )
         decoded_image = get_value_at_index(vaedecode_8, 0)
+        
+        # Handle dict outputs from decoder
+        if isinstance(decoded_image, dict):
+            if "image" in decoded_image:
+                decoded_image = decoded_image["image"]
+            elif "pixels" in decoded_image:
+                decoded_image = decoded_image["pixels"]
+            elif len(decoded_image) == 1:
+                decoded_image = list(decoded_image.values())[0]
         
         # Save decoding output (image tensor)
         save_tensor(
