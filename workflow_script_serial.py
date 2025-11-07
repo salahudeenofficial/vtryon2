@@ -98,15 +98,38 @@ add_extra_model_paths()
 
 def import_custom_nodes_minimal() -> None:
     """
-    Minimal custom node loading using asyncio.run() without server infrastructure.
+    Minimal custom node loading that works both standalone and within an existing event loop.
     This is lighter than the full server setup but still requires async execution.
     """
     import asyncio
     from nodes import init_extra_nodes
     
-    # Simply run the async function with asyncio.run() - no server needed
-    # This creates a new event loop, runs the coroutine, and closes the loop
-    asyncio.run(init_extra_nodes(init_custom_nodes=True, init_api_nodes=False))
+    # Check if there's a running event loop (e.g., from FastAPI)
+    try:
+        loop = asyncio.get_running_loop()
+        # If we're in an existing event loop, we need to run it differently
+        # Use asyncio.ensure_future or create_task, but we need to wait for it
+        # Since this is a synchronous function, we'll use run_until_complete on a new thread
+        import concurrent.futures
+        import threading
+        
+        def run_in_thread():
+            # Create a new event loop in this thread
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                new_loop.run_until_complete(init_extra_nodes(init_custom_nodes=True, init_api_nodes=False))
+            finally:
+                new_loop.close()
+        
+        # Run in a separate thread to avoid event loop conflicts
+        thread = threading.Thread(target=run_in_thread)
+        thread.start()
+        thread.join()
+        
+    except RuntimeError:
+        # No running event loop, safe to use asyncio.run()
+        asyncio.run(init_extra_nodes(init_custom_nodes=True, init_api_nodes=False))
 
 
 from nodes import (
