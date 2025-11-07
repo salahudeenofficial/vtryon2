@@ -51,33 +51,38 @@ def load_models_once() -> Dict[str, Any]:
     import_custom_nodes_minimal()
     
     with torch.inference_mode():
-        # Load UNET model
-        logger.info("Loading UNET model...")
+        # Load UNET model (will load on CPU initially, moved to GPU when needed)
+        logger.info("Loading UNET model on CPU...")
         unetloader = UNETLoader()
         unet_model = unetloader.load_unet(
             unet_name="qwen_image_edit_2509_fp8_e4m3fn.safetensors",
             weight_dtype="default",
         )
-        _model_cache["unet"] = get_value_at_index(unet_model, 0)
-        logger.info("✓ UNET model loaded")
+        unet_model_obj = get_value_at_index(unet_model, 0)
+        # Ensure UNET stays on CPU until needed
+        # ComfyUI will automatically move it to GPU when used during inference
+        _model_cache["unet"] = unet_model_obj
+        logger.info("✓ UNET model loaded on CPU (will move to GPU on-demand)")
         
-        # Load CLIP model
-        logger.info("Loading CLIP model...")
+        # Load CLIP model on CPU (will be moved to GPU when needed)
+        logger.info("Loading CLIP model on CPU...")
         cliploader = CLIPLoader()
         clip_model = cliploader.load_clip(
             clip_name="qwen_2.5_vl_7b_fp8_scaled.safetensors",
             type="qwen_image",
-            device="default",
+            device="cpu",  # Load on CPU first
         )
         _model_cache["clip"] = get_value_at_index(clip_model, 0)
-        logger.info("✓ CLIP model loaded")
+        logger.info("✓ CLIP model loaded on CPU")
         
-        # Load VAE model
-        logger.info("Loading VAE model...")
+        # Load VAE model (will load on CPU initially, moved to GPU when needed)
+        logger.info("Loading VAE model on CPU...")
         vaeloader = VAELoader()
         vae_model = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
-        _model_cache["vae"] = get_value_at_index(vae_model, 0)
-        logger.info("✓ VAE model loaded")
+        vae_model_obj = get_value_at_index(vae_model, 0)
+        # VAE will be moved to GPU automatically by ComfyUI when used
+        _model_cache["vae"] = vae_model_obj
+        logger.info("✓ VAE model loaded on CPU (will move to GPU on-demand)")
         
         # Load LoRA model
         logger.info("Loading LoRA model...")
@@ -96,28 +101,18 @@ def load_models_once() -> Dict[str, Any]:
         _model_cache["vaeloader"] = vaeloader
         _model_cache["loraloadermodelonly"] = loraloadermodelonly
         
-        # Ensure models are loaded into GPU memory using ComfyUI's model management
-        logger.info("Loading models into GPU memory...")
-        try:
-            import comfy.model_management as model_management
-            # Load UNET model into GPU
-            model_management.load_models_gpu([_model_cache["unet"]], force_full_load=True)
-            logger.info("✓ UNET model loaded into GPU")
-            
-            # Note: CLIP and VAE are typically loaded on-demand, but we can preload them too
-            # For now, they'll be loaded when first used
-        except Exception as e:
-            logger.warning(f"Could not explicitly load models into GPU: {e}")
-            logger.info("Models will be loaded on-demand (this is normal for CLIP/VAE)")
+        # Models are loaded on CPU and will be moved to GPU automatically by ComfyUI
+        # when they are actually used during inference. This saves GPU memory.
+        logger.info("Models loaded on CPU - will be moved to GPU on-demand during inference")
         
         _models_loaded = True
-        logger.info("✓ All models loaded and cached successfully!")
+        logger.info("✓ All models loaded and cached successfully (on CPU)!")
         
-        # Log memory usage
+        # Log memory usage (should be minimal since models are on CPU)
         if torch.cuda.is_available():
             memory_allocated = torch.cuda.memory_allocated() / 1024**3  # GB
             memory_reserved = torch.cuda.memory_reserved() / 1024**3  # GB
-            logger.info(f"GPU Memory - Allocated: {memory_allocated:.2f} GB, Reserved: {memory_reserved:.2f} GB")
+            logger.info(f"GPU Memory - Allocated: {memory_allocated:.2f} GB, Reserved: {memory_reserved:.2f} GB (models on CPU)")
     
     return _model_cache
 

@@ -152,14 +152,9 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         logger.error(traceback.format_exc())
         raise RuntimeError(f"Failed to get cached models: {e}")
     
-    # Ensure models are loaded into GPU memory before use
-    try:
-        import comfy.model_management as model_management
-        # Ensure UNET is in GPU memory
-        model_management.load_models_gpu([unet_model], force_full_load=True)
-    except Exception as e:
-        logger.warning(f"Could not ensure models in GPU: {e}")
-        # Continue anyway - models might already be loaded
+    # Models will be automatically loaded to GPU by ComfyUI when needed
+    # No need to explicitly load them here - ComfyUI's model management handles it
+    # This ensures models stay on CPU until actually needed, saving GPU memory
     
     with torch.inference_mode():
 
