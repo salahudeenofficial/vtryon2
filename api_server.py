@@ -223,7 +223,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
 @app.post("/tryon_extracted")
 async def tryon_extracted(
     image: UploadFile = File(..., description="Input person image"),
-    cloth: UploadFile = File(..., description="Cloth/garment image to try on"),
+    cloth: UploadFile = File(None, description="Cloth/garment image to try on (optional, falls back to input/cloth.png)"),
     mask_type: str = Form(..., description="Mask type: upper_body, lower_body, or other"),
     prompt: str = Form(..., description="Text prompt for virtual try-on")
 ):
@@ -263,11 +263,20 @@ async def tryon_extracted(
             shutil.copyfileobj(image.file, f)
         print(f"✓ Person image saved to: {temp_input_path}")
         
-        # Save uploaded cloth image to input directory
+        # Handle cloth image (uploaded or use existing)
         temp_cloth_path = INPUT_DIR / "cloth.png"
-        with open(temp_cloth_path, "wb") as f:
-            shutil.copyfileobj(cloth.file, f)
-        print(f"✓ Cloth image saved to: {temp_cloth_path}")
+        if cloth and cloth.filename:
+            # Save uploaded cloth image to input directory
+            with open(temp_cloth_path, "wb") as f:
+                shutil.copyfileobj(cloth.file, f)
+            print(f"✓ Cloth image uploaded and saved to: {temp_cloth_path}")
+        else:
+            # Check if cloth.png already exists in input directory
+            if not temp_cloth_path.exists():
+                error_msg = f"cloth.png not found in {INPUT_DIR.absolute()}. Please either upload a cloth image or ensure cloth.png exists in the input directory."
+                print(f"❌ {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+            print(f"✓ Using existing cloth image: {temp_cloth_path}")
         
         # Call masked_image function
         print(f"🎭 Creating masked image (mask_type: {mask_type})...")
