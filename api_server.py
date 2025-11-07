@@ -13,59 +13,18 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Optional
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Import mask.py function
 from mask import masked_image
 
-# Import model cache
-from model_cache import load_models_once, get_cached_model, is_models_loaded
-
 # Add current directory to path for workflow_script_serial
 sys.path.insert(0, str(Path(__file__).parent))
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan context manager.
-    Loads models at startup and keeps them in memory.
-    """
-    # Startup: Load models
-    logger.info("=" * 60)
-    logger.info("FastAPI Startup: Loading models into memory...")
-    logger.info("=" * 60)
-    try:
-        load_models_once()
-        logger.info("=" * 60)
-        logger.info("✓ All models loaded and ready for requests!")
-        logger.info("=" * 60)
-    except Exception as e:
-        logger.error(f"❌ Failed to load models at startup: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise
-    
-    yield
-    
-    # Shutdown: Cleanup (optional)
-    logger.info("FastAPI Shutdown: Cleaning up...")
-
-
-app = FastAPI(
-    title="Virtual Try-On API",
-    version="1.0.0",
-    lifespan=lifespan
-)
+app = FastAPI(title="Virtual Try-On API", version="1.0.0")
 
 # Add CORS middleware
 app.add_middleware(
@@ -135,28 +94,23 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Create a placeholder or raise error
         raise FileNotFoundError("cloth.png not found in input directory. Please provide a cloth image.")
     
-    # Check if models are loaded, if not load them (fallback)
-    if not is_models_loaded():
-        logger.warning("Models not loaded at startup, loading now (this should not happen)")
-        load_models_once()
-    
-    # Get cached models (already loaded and in memory)
-    try:
-        unet_model = get_cached_model("unet")
-        clip_model = get_cached_model("clip")
-        vae_model = get_cached_model("vae")
-        lora_model = get_cached_model("lora_model")
-    except Exception as e:
-        logger.error(f"Error getting cached models: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise RuntimeError(f"Failed to get cached models: {e}")
-    
-    # Models will be automatically loaded to GPU by ComfyUI when needed
-    # No need to explicitly load them here - ComfyUI's model management handles it
-    # This ensures models stay on CPU until actually needed, saving GPU memory
-    
     with torch.inference_mode():
+        # Load models
+        unetloader = UNETLoader()
+        unetloader_37 = unetloader.load_unet(
+            unet_name="qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+            weight_dtype="default",
+        )
+
+        cliploader = CLIPLoader()
+        cliploader_38 = cliploader.load_clip(
+            clip_name="qwen_2.5_vl_7b_fp8_scaled.safetensors",
+            type="qwen_image",
+            device="default",
+        )
+
+        vaeloader = VAELoader()
+        vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
 
         # Load masked person image
         loadimage = LoadImage()
@@ -174,7 +128,15 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         vaeencode = VAEEncode()
         vaeencode_88 = vaeencode.encode(
             pixels=get_value_at_index(imagescaletototalpixels_93, 0),
-            vae=vae_model,  # Use cached VAE model
+            vae=get_value_at_index(vaeloader_39, 0),
+        )
+
+        # Load LoRA
+        loraloadermodelonly = LoraLoaderModelOnly()
+        loraloadermodelonly_89 = loraloadermodelonly.load_lora_model_only(
+            lora_name="Qwen-Image-Lightning-4steps-V2.0.safetensors",
+            strength_model=1,
+            model=get_value_at_index(unetloader_37, 0),
         )
 
         # Load cloth image
@@ -196,7 +158,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
 
         # Apply model sampling
         modelsamplingauraflow_66 = modelsamplingauraflow.patch_aura(
-            shift=3, model=lora_model  # Use cached LoRA model
+            shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)
         )
 
         cfgnorm_75 = cfgnorm.EXECUTE_NORMALIZED(
@@ -207,8 +169,8 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Positive prompt
         textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt=prompt,
-            clip=clip_model,  # Use cached CLIP model
-            vae=vae_model,  # Use cached VAE model
+            clip=get_value_at_index(cliploader_38, 0),
+            vae=get_value_at_index(vaeloader_39, 0),
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -216,8 +178,8 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Negative prompt (empty)
         textencodeqwenimageeditplus_110 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt="",
-            clip=clip_model,  # Use cached CLIP model
-            vae=vae_model,  # Use cached VAE model
+            clip=get_value_at_index(cliploader_38, 0),
+            vae=get_value_at_index(vaeloader_39, 0),
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -240,7 +202,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Decode
         vaedecode_8 = vaedecode.decode(
             samples=get_value_at_index(ksampler_3, 0),
-            vae=vae_model,  # Use cached VAE model
+            vae=get_value_at_index(vaeloader_39, 0),
         )
 
         # Save image
@@ -355,10 +317,6 @@ async def tryon_extracted(
         )
         
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        logger.error(f"❌ Error processing request: {str(e)}")
-        logger.error(f"Full traceback:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
     finally:
