@@ -1,56 +1,29 @@
-# Additional packages required for mask.py
-# This file contains packages NOT already in requirements.txt
-# to avoid version conflicts
 
-# Core ML/AI libraries
-# Note: numpy<2.0.0 to avoid compatibility issues with detectron2/densepose
-# DensePose may try to install numpy>=2.0, so we pin it explicitly
-# numpy is already in requirements.txt (>=1.25.0), so excluded here
-# scipy is already in requirements.txt, so excluded here
 scikit-image>=0.20.0
-# Use opencv-python (not headless) and pin to version compatible with numpy<2.0
 opencv-python>=4.8.0,<4.12.0
-# Pillow is already in requirements.txt, so excluded here
 diffusers==0.20.2
-# transformers is already in requirements.txt (>=4.37.2), so excluded here
 xformers==0.0.20
 accelerate>=0.20.0
 matplotlib>=3.7.0
-# tqdm is already in requirements.txt, so excluded here
 gradio==3.44.4
-# einops is already in requirements.txt, so excluded here
 onnxruntime>=1.15.0
 basicsr>=1.4.2
-# av is already in requirements.txt (>=14.2.0), so excluded here
 cloudpickle>=2.2.0
 fvcore>=0.1.5
-# omegaconf version determined by hydra-core (>=2.2,<2.4)
 hydra-core>=1.1.0,<1.4.0
 pycocotools>=2.0.6
 
-# Additional dependencies for detectron2 and densepose
 setuptools>=65.0.0
 wheel>=0.40.0
-# pyyaml is already in requirements.txt, so excluded here
 yacs>=0.1.8
 tabulate>=0.9.0
 termcolor>=2.3.0
 iopath>=0.1.9
 portalocker>=2.7.0
 pydot>=1.4.2
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
 
-# Note: detectron2 and densepose will be installed from local source
-# They are located in preprocess/detectron2/
 
-# Excluded packages (already in requirements.txt):
-# - torch (already in requirements.txt)
-# - torchvision (already in requirements.txt)
-# - numpy>=1.25.0 (already in requirements.txt)
-# - scipy (already in requirements.txt)
-# - Pillow (already in requirements.txt)
-# - einops (already in requirements.txt)
-# - transformers>=4.37.2 (already in requirements.txt)
-# - tqdm (already in requirements.txt)
-# - pyyaml (already in requirements.txt)
-# - av>=14.2.0 (already in requirements.txt)
 
