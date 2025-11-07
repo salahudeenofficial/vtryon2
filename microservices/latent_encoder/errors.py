@@ -40,3 +40,5 @@ class ComfyUIInitializationError(LatentEncoderError):
     """Raised when ComfyUI initialization fails."""
     pass
 
+
+

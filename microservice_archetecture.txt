@@ -1,0 +1,96 @@
+1)  latent_encoder
+        input: image1
+        output: img1_enc
+        code snippet like: 
+
+                vaeloader = VAELoader()
+                vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
+                loadimage = LoadImage()
+                imagescaletototalpixels = NODE_CLASS_MAPPINGS["ImageScaleToTotalPixels"]()
+                vaeencode = VAEEncode()
+                loadimage_78 = loadimage.load_image(image=masked_person_path)
+
+                imagescaletototalpixels_93 = imagescaletototalpixels.EXECUTE_NORMALIZED(
+                    upscale_method="lanczos",
+                    megapixels=1,
+                    image=get_value_at_index(loadimage_78, 0),
+                )
+                
+                # Encode to latent
+                vaeencode_88 = vaeencode.encode(
+                    pixels=get_value_at_index(imagescaletototalpixels_93, 0),
+                    vae=get_value_at_index(vaeloader_39, 0),
+                )
+                img1_enc = get_value_at_index(vaeencode_88, 0)
+2) text_encoder
+    input: image1,image2,prompt
+    output: t_en_out1,t_en_out2
+    code snippet like:
+                vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
+
+                loadimage_78 = loadimage.load_image(image=masked_person_path)
+                loadimage_106 = loadimage.load_image(image=cloth_path)
+                #load clip and vae
+                    
+                # Encode prompts
+                textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
+                    prompt="by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1.",
+                    clip=get_value_at_index(cliploader_38, 0),
+                    vae=get_value_at_index(vaeloader_39, 0),
+                    image1=get_value_at_index(imagescaletototalpixels_93, 0),
+                    image2=get_value_at_index(loadimage_106, 0),
+                )
+
+                textencodeqwenimageeditplus_110 = (
+                    textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
+                        prompt="",
+                        clip=get_value_at_index(cliploader_38, 0),
+                        vae=get_value_at_index(vaeloader_39, 0),
+                        image1=get_value_at_index(imagescaletototalpixels_93, 0),
+                        image2=get_value_at_index(loadimage_106, 0),
+                    )
+                )
+                t_en_out1 = get_value_at_index(textencodeqwenimageeditplus_111, 0)
+                t_en_out2  = get_value_at_index(textencodeqwenimageeditplus_110, 0)
+3) sampling
+input:t_en_out1,t_en_out2,img1_enc
+output:
+code snippet like:
+        ksampler = KSampler()
+        modelsamplingauraflow_66 = modelsamplingauraflow.patch_aura(
+                    shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)
+                )
+
+        cfgnorm_75 = cfgnorm.EXECUTE_NORMALIZED(
+                    strength=1, model=get_value_at_index(modelsamplingauraflow_66, 0)
+                )
+        ksampler_3 = ksampler.sample(
+                    seed=random.randint(1, 2**64),
+                    steps=4,
+                    cfg=1,
+                    sampler_name="euler",
+                    scheduler="simple",
+                    denoise=1,
+                    model=get_value_at_index(cfgnorm_75, 0),
+                    positive=t_en_out1,
+                    negative=t_en_out2,
+                    latent_image=img1_enc,
+                )
+        k_out =  get_value_at_index(ksampler_3, 0)
+4) decoding
+input:k_out
+output:file_name.jpg
+code snippet like:
+                vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
+
+                vaedecode_8 = vaedecode.decode(
+                    samples=get_value_at_index(ksampler_3, 0),
+                    vae=get_value_at_index(vaeloader_39, 0),
+                )
+
+                # Save with descriptive filename
+                output_filename = f"test_{gender}_{number}"
+                saveimage_60 = saveimage.save_images(
+                    filename_prefix=output_filename,
+                    images=get_value_at_index(vaedecode_8, 0),
+                )

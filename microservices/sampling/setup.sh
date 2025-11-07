@@ -343,3 +343,5 @@ echo "Note: All dependencies have been installed from requirements.txt"
 echo "      (ComfyUI base requirements + microservice additions)"
 echo "=========================================="
 
+
+

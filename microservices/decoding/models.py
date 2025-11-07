@@ -92,3 +92,5 @@ class KafkaDecodingResponse(BaseModel):
     metadata: Optional[dict] = None
     timestamp: str
 
+
+

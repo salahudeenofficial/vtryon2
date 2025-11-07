@@ -115,3 +115,5 @@ class KafkaTextEncoderResponse(BaseModel):
     metadata: Optional[dict] = None
     timestamp: str
 
+
+

@@ -72,3 +72,5 @@ echo "You can now run the latent encoder service:"
 echo "  python main.py --mode standalone --image_path <path_to_image>"
 echo "=========================================="
 
+
+

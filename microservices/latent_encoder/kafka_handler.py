@@ -138,3 +138,5 @@ def consume_and_process():
         consumer.close()
         producer.flush()
 
+
+

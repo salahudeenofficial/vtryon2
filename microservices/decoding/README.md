@@ -88,3 +88,5 @@ cp .env.example .env
 - **PNG**: Lossless, supports transparency
 - **WebP**: Modern format, good compression
 
+
+

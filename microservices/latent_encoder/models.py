@@ -74,3 +74,5 @@ class KafkaMessage(BaseModel):
     megapixels: Optional[float] = 1.0
     timestamp: Optional[int] = None
 
+
+

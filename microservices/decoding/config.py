@@ -74,3 +74,5 @@ class Config:
         if cls.default_output_format not in ["jpg", "jpeg", "png", "webp"]:
             raise ValueError(f"Invalid output format: {cls.default_output_format}. Must be jpg, png, or webp")
 
+
+

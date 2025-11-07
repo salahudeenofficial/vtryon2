@@ -74,3 +74,5 @@ class Config:
         if not vae_path.exists():
             raise ValueError(f"VAE model not found: {vae_path}")
 
+
+
