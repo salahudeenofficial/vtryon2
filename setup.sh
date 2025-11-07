@@ -25,70 +25,70 @@ echo "Python version: ${PYTHON_VERSION}"
 echo "=========================================="
 echo ""
 
-# Step 1: Create Python 3.13 virtual environment
-echo "Step 1: Creating Python ${PYTHON_VERSION} virtual environment..."
-echo "---------------------------------------------------"
+# # Step 1: Create Python 3.13 virtual environment
+# echo "Step 1: Creating Python ${PYTHON_VERSION} virtual environment..."
+# echo "---------------------------------------------------"
 
-# Check if Python 3.13 is available
-if command -v python3.13 >/dev/null 2>&1; then
-    PYTHON_CMD=$(command -v python3.13)
-    echo "Found Python 3.13"
-elif command -v python${PYTHON_VERSION} >/dev/null 2>&1; then
-    PYTHON_CMD=$(command -v python${PYTHON_VERSION})
-    echo "Found Python ${PYTHON_VERSION}"
-else
-    echo "⚠️  Python ${PYTHON_VERSION} not found. Checking for python3..."
-    if command -v python3 >/dev/null 2>&1; then
-        PYTHON_CMD=$(command -v python3)
-        PYTHON_VERSION_CHECK=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-        echo "Found Python $PYTHON_VERSION_CHECK"
+# # Check if Python 3.13 is available
+# if command -v python3.13 >/dev/null 2>&1; then
+#     PYTHON_CMD=$(command -v python3.13)
+#     echo "Found Python 3.13"
+# elif command -v python${PYTHON_VERSION} >/dev/null 2>&1; then
+#     PYTHON_CMD=$(command -v python${PYTHON_VERSION})
+#     echo "Found Python ${PYTHON_VERSION}"
+# else
+#     echo "⚠️  Python ${PYTHON_VERSION} not found. Checking for python3..."
+#     if command -v python3 >/dev/null 2>&1; then
+#         PYTHON_CMD=$(command -v python3)
+#         PYTHON_VERSION_CHECK=$($PYTHON_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+#         echo "Found Python $PYTHON_VERSION_CHECK"
         
-        # Simple version check: extract major.minor and compare
-        MAJOR=$(echo "$PYTHON_VERSION_CHECK" | cut -d. -f1)
-        MINOR=$(echo "$PYTHON_VERSION_CHECK" | cut -d. -f2)
+#         # Simple version check: extract major.minor and compare
+#         MAJOR=$(echo "$PYTHON_VERSION_CHECK" | cut -d. -f1)
+#         MINOR=$(echo "$PYTHON_VERSION_CHECK" | cut -d. -f2)
         
-        if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 8 ]); then
-            echo "❌ Python 3.8+ required. Found Python $PYTHON_VERSION_CHECK"
-            exit 1
-        fi
-    else
-        echo "❌ Python 3 not found. Please install Python 3.8 or later."
-        exit 1
-    fi
-fi
+#         if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 8 ]); then
+#             echo "❌ Python 3.8+ required. Found Python $PYTHON_VERSION_CHECK"
+#             exit 1
+#         fi
+#     else
+#         echo "❌ Python 3 not found. Please install Python 3.8 or later."
+#         exit 1
+#     fi
+# fi
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment..."
-    $PYTHON_CMD -m venv "$VENV_DIR"
-    echo "✓ Virtual environment created"
-else
-    echo "✓ Virtual environment already exists"
-fi
+# # Create virtual environment if it doesn't exist
+# if [ ! -d "$VENV_DIR" ]; then
+#     echo "Creating virtual environment..."
+#     $PYTHON_CMD -m venv "$VENV_DIR"
+#     echo "✓ Virtual environment created"
+# else
+#     echo "✓ Virtual environment already exists"
+# fi
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source "$VENV_DIR/bin/activate"
+# # Activate virtual environment
+# echo "Activating virtual environment..."
+# source "$VENV_DIR/bin/activate"
 
-# Upgrade pip
-echo "Upgrading pip..."
-pip install --upgrade pip >/dev/null 2>&1 || true
+# # Upgrade pip
+# echo "Upgrading pip..."
+# pip install --upgrade pip >/dev/null 2>&1 || true
 
-echo ""
+# echo ""
 
-# Step 2: Install PyTorch with CUDA 13.0
-echo "Step 2: Installing PyTorch with CUDA 13.0..."
-echo "---------------------------------------------------"
-pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu130 || {
-    echo "⚠️  Failed to install PyTorch with CUDA 13.0, trying default PyTorch..."
-    pip install torch torchvision torchaudio || {
-        echo "❌ Failed to install PyTorch"
-        exit 1
-    }
-}
-echo "✓ PyTorch installed"
+# # Step 2: Install PyTorch with CUDA 13.0
+# echo "Step 2: Installing PyTorch with CUDA 13.0..."
+# echo "---------------------------------------------------"
+# pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu130 || {
+#     echo "⚠️  Failed to install PyTorch with CUDA 13.0, trying default PyTorch..."
+#     pip install torch torchvision torchaudio || {
+#         echo "❌ Failed to install PyTorch"
+#         exit 1
+#     }
+# }
+# echo "✓ PyTorch installed"
 
-echo ""
+# echo ""
 
 # Step 3: Download all models
 echo "Step 3: Downloading all required models..."
@@ -107,15 +107,7 @@ fi
 
 echo ""
 
-# Step 4: Install basicsr
-echo "Step 4: Installing basicsr..."
-echo "---------------------------------------------------"
-pip install basicsr>=1.4.2 || {
-    echo "⚠️  Failed to install basicsr, continuing anyway..."
-}
-echo "✓ basicsr installed"
 
-echo ""
 
 # Step 5: Install requirements from requirements.txt
 echo "Step 5: Installing requirements from requirements.txt..."
