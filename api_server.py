@@ -237,6 +237,12 @@ async def tryon_extracted(
     3. Run workflow_script_serial.py with masked image and prompt
     4. Return the generated image
     """
+    print(f"\n{'='*60}")
+    print(f"📥 Received request: /tryon_extracted")
+    print(f"   mask_type: {mask_type}")
+    print(f"   prompt: {prompt[:50]}..." if len(prompt) > 50 else f"   prompt: {prompt}")
+    print(f"{'='*60}\n")
+    
     # Validate mask_type
     valid_mask_types = ['upper_body', 'lower_body', 'other']
     if mask_type not in valid_mask_types:
@@ -245,17 +251,29 @@ async def tryon_extracted(
             detail=f"mask_type must be one of {valid_mask_types}, got '{mask_type}'"
         )
     
+    # Pre-flight checks
+    print("🔍 Pre-flight checks...")
+    cloth_path = INPUT_DIR / "cloth.png"
+    if not cloth_path.exists():
+        error_msg = f"cloth.png not found in {INPUT_DIR.absolute()}. Please ensure cloth.png exists in the input directory."
+        print(f"❌ {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+    print(f"✓ cloth.png found: {cloth_path}")
+    
     # Create temporary file for uploaded image
     temp_input_path = None
     temp_masked_path = None
     
     try:
+        print("💾 Saving uploaded image...")
         # Save uploaded image to temporary file
         temp_input_path = TEMP_DIR / f"input_{os.urandom(8).hex()}.png"
         with open(temp_input_path, "wb") as f:
             shutil.copyfileobj(image.file, f)
+        print(f"✓ Image saved to: {temp_input_path}")
         
         # Call masked_image function
+        print(f"🎭 Creating masked image (mask_type: {mask_type})...")
         temp_masked_path = TEMP_DIR / f"masked_{os.urandom(8).hex()}.png"
         masked_image_path = masked_image(
             mask_type=mask_type,
@@ -265,19 +283,25 @@ async def tryon_extracted(
             height=768,
             device_index=0
         )
+        print(f"✓ Masked image created: {masked_image_path}")
         
         # Run workflow
+        print(f"🔄 Running workflow with prompt...")
         output_filename = f"tryon_{os.urandom(8).hex()}"
         output_image_path = run_workflow_serial(
             masked_person_path=masked_image_path,
             prompt=prompt,
             output_filename=output_filename
         )
+        print(f"✓ Workflow completed. Output: {output_image_path}")
         
         # Return the generated image
         if not Path(output_image_path).exists():
-            raise HTTPException(status_code=500, detail="Generated image file not found")
+            error_msg = f"Generated image file not found: {output_image_path}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         
+        print(f"✅ Success! Returning image: {output_image_path}")
         return FileResponse(
             output_image_path,
             media_type="image/png",
@@ -285,6 +309,10 @@ async def tryon_extracted(
         )
         
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error processing request: {str(e)}")
+        print(f"Full traceback:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
     finally:
