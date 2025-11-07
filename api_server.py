@@ -206,20 +206,46 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         )
 
         # Save image
-        saveimage_60 = saveimage.save_images(
+        saveimage_result = saveimage.save_images(
             filename_prefix=output_filename,
             images=get_value_at_index(vaedecode_8, 0),
         )
         
-        # Get the saved image path
-        # SaveImage returns a dict with UI info, we need to find the actual file
-        # The image is saved in the output directory with the filename_prefix
-        # Find the most recent file with the prefix
-        output_files = sorted(OUTPUT_DIR.glob(f"{output_filename}*.png"), key=os.path.getmtime, reverse=True)
-        if output_files:
-            return str(output_files[0])
-        else:
-            raise RuntimeError("Failed to save output image")
+        # Get the saved image path from the return value
+        # SaveImage returns: { "ui": { "images": [{"filename": "...", "subfolder": "...", "type": "..."}] } }
+        try:
+            saved_images = saveimage_result.get("ui", {}).get("images", [])
+            if not saved_images:
+                raise RuntimeError("SaveImage did not return image information")
+            
+            # Get the first saved image (usually only one)
+            first_image = saved_images[0]
+            saved_filename = first_image.get("filename")
+            subfolder = first_image.get("subfolder", "")
+            
+            if not saved_filename:
+                raise RuntimeError("SaveImage did not return filename")
+            
+            # Construct full path
+            if subfolder:
+                output_path = OUTPUT_DIR / subfolder / saved_filename
+            else:
+                output_path = OUTPUT_DIR / saved_filename
+            
+            # Verify file exists
+            if not output_path.exists():
+                raise RuntimeError(f"Saved image file not found: {output_path}")
+            
+            return str(output_path)
+            
+        except Exception as e:
+            # Fallback: try to find the file by pattern (less reliable)
+            print(f"Warning: Could not extract filename from SaveImage result: {e}")
+            output_files = sorted(OUTPUT_DIR.glob(f"{output_filename}*.png"), key=os.path.getmtime, reverse=True)
+            if output_files:
+                return str(output_files[0])
+            else:
+                raise RuntimeError("Failed to save output image")
 
 
 @app.post("/tryon_extracted")
