@@ -17,7 +17,16 @@ import random
 import torch
 import cv2
 from torch.utils import data
-from utils.transforms import get_affine_transform
+try:
+    from utils.transforms import get_affine_transform
+except ImportError:
+    # Fallback: try relative import
+    import sys
+    from pathlib import Path
+    utils_path = Path(__file__).parent.parent / "utils"
+    if str(utils_path.parent) not in sys.path:
+        sys.path.insert(0, str(utils_path.parent))
+    from utils.transforms import get_affine_transform
 
 
 class LIPDataSet(data.Dataset):

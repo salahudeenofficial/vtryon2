@@ -14,7 +14,16 @@ from datasets.simple_extractor_dataset import SimpleFolderDataset
 from PIL import Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from utils.transforms import transform_logits, get_affine_transform
+try:
+    from utils.transforms import transform_logits, get_affine_transform
+except ImportError:
+    # Fallback: try relative import
+    import sys
+    from pathlib import Path
+    utils_path = Path(__file__).parent / "utils"
+    if str(utils_path.parent) not in sys.path:
+        sys.path.insert(0, str(utils_path.parent))
+    from utils.transforms import transform_logits, get_affine_transform
 
 
 def get_palette(num_cls):

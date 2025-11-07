@@ -18,7 +18,16 @@ import cv2
 import numpy as np
 from PIL import Image
 from torch.utils import data
-from utils.transforms import get_affine_transform
+try:
+    from utils.transforms import get_affine_transform
+except ImportError:
+    # Fallback: try relative import
+    import sys
+    from pathlib import Path
+    utils_path = Path(__file__).parent.parent / "utils"
+    if str(utils_path) not in sys.path:
+        sys.path.insert(0, str(utils_path.parent))
+    from utils.transforms import get_affine_transform
 
 
 class SimpleFolderDataset(data.Dataset):

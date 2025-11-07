@@ -4,7 +4,11 @@ import numpy as np
 
 from collections import OrderedDict
 from PIL import Image as PILImage
-from utils.transforms import transform_parsing
+try:
+    from utils.transforms import transform_parsing
+except ImportError:
+    # Fallback: try relative import (we're already in utils directory)
+    from .transforms import transform_parsing
 
 LABELS = ['Background', 'Hat', 'Hair', 'Glove', 'Sunglasses', 'Upper-clothes', 'Dress', 'Coat', \
           'Socks', 'Pants', 'Jumpsuits', 'Scarf', 'Skirt', 'Face', 'Left-arm', 'Right-arm', 'Left-leg',

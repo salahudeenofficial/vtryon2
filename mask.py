@@ -15,6 +15,10 @@ import cv2
 stableviton_dir = Path(__file__).absolute().parent / "StableVITON"
 sys.path.insert(0, str(stableviton_dir))
 
+# Add preprocess/humanparsing to path so utils.transforms can be imported
+humanparsing_dir = stableviton_dir / "preprocess" / "humanparsing"
+sys.path.insert(0, str(humanparsing_dir))
+
 # Global cache for preprocessors to avoid re-initialization
 _preprocessors_cache = None
 
