@@ -96,6 +96,20 @@ def load_models_once() -> Dict[str, Any]:
         _model_cache["vaeloader"] = vaeloader
         _model_cache["loraloadermodelonly"] = loraloadermodelonly
         
+        # Ensure models are loaded into GPU memory using ComfyUI's model management
+        logger.info("Loading models into GPU memory...")
+        try:
+            import comfy.model_management as model_management
+            # Load UNET model into GPU
+            model_management.load_models_gpu([_model_cache["unet"]], force_full_load=True)
+            logger.info("✓ UNET model loaded into GPU")
+            
+            # Note: CLIP and VAE are typically loaded on-demand, but we can preload them too
+            # For now, they'll be loaded when first used
+        except Exception as e:
+            logger.warning(f"Could not explicitly load models into GPU: {e}")
+            logger.info("Models will be loaded on-demand (this is normal for CLIP/VAE)")
+        
         _models_loaded = True
         logger.info("✓ All models loaded and cached successfully!")
         

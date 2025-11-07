@@ -141,10 +141,25 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         load_models_once()
     
     # Get cached models (already loaded and in memory)
-    unet_model = get_cached_model("unet")
-    clip_model = get_cached_model("clip")
-    vae_model = get_cached_model("vae")
-    lora_model = get_cached_model("lora_model")
+    try:
+        unet_model = get_cached_model("unet")
+        clip_model = get_cached_model("clip")
+        vae_model = get_cached_model("vae")
+        lora_model = get_cached_model("lora_model")
+    except Exception as e:
+        logger.error(f"Error getting cached models: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise RuntimeError(f"Failed to get cached models: {e}")
+    
+    # Ensure models are loaded into GPU memory before use
+    try:
+        import comfy.model_management as model_management
+        # Ensure UNET is in GPU memory
+        model_management.load_models_gpu([unet_model], force_full_load=True)
+    except Exception as e:
+        logger.warning(f"Could not ensure models in GPU: {e}")
+        # Continue anyway - models might already be loaded
     
     with torch.inference_mode():
 
@@ -345,6 +360,10 @@ async def tryon_extracted(
         )
         
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"❌ Error processing request: {str(e)}")
+        logger.error(f"Full traceback:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
     finally:
