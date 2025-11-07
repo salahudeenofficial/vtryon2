@@ -124,20 +124,20 @@ fi
 
 echo ""
 
-# Step 6: Install additional dependencies from mask.txt (if exists)
-echo "Step 6: Installing additional dependencies from mask.txt..."
-echo "---------------------------------------------------"
-if [ -f "${SCRIPT_DIR}/mask.txt" ]; then
-    echo "Installing packages from mask.txt..."
-    pip install -r "${SCRIPT_DIR}/mask.txt" || {
-        echo "⚠️  Some packages from mask.txt failed to install. Continuing anyway..."
-    }
-    echo "✓ Additional dependencies installed"
-else
-    echo "⚠️  mask.txt not found, skipping additional dependencies"
-fi
+# # Step 6: Install additional dependencies from mask.txt (if exists)
+# echo "Step 6: Installing additional dependencies from mask.txt..."
+# echo "---------------------------------------------------"
+# if [ -f "${SCRIPT_DIR}/mask.txt" ]; then
+#     echo "Installing packages from mask.txt..."
+#     pip install -r "${SCRIPT_DIR}/mask.txt" || {
+#         echo "⚠️  Some packages from mask.txt failed to install. Continuing anyway..."
+#     }
+#     echo "✓ Additional dependencies installed"
+# else
+#     echo "⚠️  mask.txt not found, skipping additional dependencies"
+# fi
 
-echo ""
+# echo ""
 
 # Step 7: Verify installation
 echo "Step 7: Verifying installation..."
