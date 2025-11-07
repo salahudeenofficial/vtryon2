@@ -131,11 +131,10 @@ echo "=========================================="
 echo "You can now load the 'Qwen Clothing Transfer v1.2.json' workflow in ComfyUI."
 echo "=========================================="
 
-
+git clone https://github.com/xinntao/BasicSR.git
+cd BasicSR
 sed -i "s/version=get_version(),/version='1.4.2',/" setup.py
 
 # 2. Install in editable mode
 pip install -e .
 
-git clone https://github.com/xinntao/BasicSR.git
-cd BasicSR
