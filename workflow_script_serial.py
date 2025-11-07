@@ -72,15 +72,22 @@ def add_extra_model_paths() -> None:
     try:
         from main import load_extra_path_config
     except ImportError:
-        print(
-            "Could not import load_extra_path_config from main.py. Looking in utils.extra_config instead."
-        )
-        from utils.extra_config import load_extra_path_config
+        try:
+            print(
+                "Could not import load_extra_path_config from main.py. Looking in utils.extra_config instead."
+            )
+            from utils.extra_config import load_extra_path_config
+        except ImportError:
+            print("Could not import load_extra_path_config. Skipping extra model paths.")
+            return
 
     extra_model_paths = find_path("extra_model_paths.yaml")
 
     if extra_model_paths is not None:
-        load_extra_path_config(extra_model_paths)
+        try:
+            load_extra_path_config(extra_model_paths)
+        except Exception as e:
+            print(f"Warning: Could not load extra model paths: {e}")
     else:
         print("Could not find the extra_model_paths config file.")
 
