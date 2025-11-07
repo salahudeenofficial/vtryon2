@@ -7,7 +7,6 @@ accelerate>=0.20.0
 matplotlib>=3.7.0
 gradio==3.44.4
 onnxruntime>=1.15.0
-basicsr
 cloudpickle>=2.2.0
 fvcore>=0.1.5
 hydra-core>=1.1.0,<1.4.0
