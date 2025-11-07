@@ -86,13 +86,11 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
     masked_person_input_path = INPUT_DIR / masked_person_filename
     shutil.copy2(masked_person_path, masked_person_input_path)
     
-    # Ensure cloth.png exists (or use a default)
-    # For now, we'll assume cloth.png is already in input directory
-    # In a full implementation, you might want to accept cloth image as well
+    # Ensure cloth.png exists in input directory
+    # (It should have been saved there by the API endpoint before calling this function)
     cloth_path = INPUT_DIR / "cloth.png"
     if not cloth_path.exists():
-        # Create a placeholder or raise error
-        raise FileNotFoundError("cloth.png not found in input directory. Please provide a cloth image.")
+        raise FileNotFoundError("cloth.png not found in input directory. The cloth image should be uploaded via the API.")
     
     with torch.inference_mode():
         # Load models
@@ -225,6 +223,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
 @app.post("/tryon_extracted")
 async def tryon_extracted(
     image: UploadFile = File(..., description="Input person image"),
+    cloth: UploadFile = File(..., description="Cloth/garment image to try on"),
     mask_type: str = Form(..., description="Mask type: upper_body, lower_body, or other"),
     prompt: str = Form(..., description="Text prompt for virtual try-on")
 ):
@@ -251,26 +250,24 @@ async def tryon_extracted(
             detail=f"mask_type must be one of {valid_mask_types}, got '{mask_type}'"
         )
     
-    # Pre-flight checks
-    print("🔍 Pre-flight checks...")
-    cloth_path = INPUT_DIR / "cloth.png"
-    if not cloth_path.exists():
-        error_msg = f"cloth.png not found in {INPUT_DIR.absolute()}. Please ensure cloth.png exists in the input directory."
-        print(f"❌ {error_msg}")
-        raise HTTPException(status_code=500, detail=error_msg)
-    print(f"✓ cloth.png found: {cloth_path}")
-    
-    # Create temporary file for uploaded image
+    # Create temporary files for uploaded images
     temp_input_path = None
     temp_masked_path = None
+    temp_cloth_path = None
     
     try:
-        print("💾 Saving uploaded image...")
-        # Save uploaded image to temporary file
+        print("💾 Saving uploaded images...")
+        # Save uploaded person image to temporary file
         temp_input_path = TEMP_DIR / f"input_{os.urandom(8).hex()}.png"
         with open(temp_input_path, "wb") as f:
             shutil.copyfileobj(image.file, f)
-        print(f"✓ Image saved to: {temp_input_path}")
+        print(f"✓ Person image saved to: {temp_input_path}")
+        
+        # Save uploaded cloth image to input directory
+        temp_cloth_path = INPUT_DIR / "cloth.png"
+        with open(temp_cloth_path, "wb") as f:
+            shutil.copyfileobj(cloth.file, f)
+        print(f"✓ Cloth image saved to: {temp_cloth_path}")
         
         # Call masked_image function
         print(f"🎭 Creating masked image (mask_type: {mask_type})...")
@@ -285,7 +282,7 @@ async def tryon_extracted(
         )
         print(f"✓ Masked image created: {masked_image_path}")
         
-        # Run workflow
+        # Run workflow (cloth.png is now in input directory from above)
         print(f"🔄 Running workflow with prompt...")
         output_filename = f"tryon_{os.urandom(8).hex()}"
         output_image_path = run_workflow_serial(
@@ -321,6 +318,10 @@ async def tryon_extracted(
             temp_input_path.unlink()
         if temp_masked_path and temp_masked_path.exists():
             temp_masked_path.unlink()
+        # Note: cloth.png is kept in input/ directory for potential reuse
+        # Uncomment below if you want to clean it up after each request:
+        # if temp_cloth_path and temp_cloth_path.exists():
+        #     temp_cloth_path.unlink()
 
 
 @app.get("/health")

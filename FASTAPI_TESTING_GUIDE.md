@@ -68,6 +68,7 @@ The FastAPI server provides a virtual try-on service that:
 ```bash
 curl -X POST "http://localhost:8000/tryon_extracted" \
   -F "image=@person.jpg" \
+  -F "cloth=@garment.jpg" \
   -F "mask_type=upper_body" \
   -F "prompt=by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1." \
   --output result.png
@@ -78,6 +79,7 @@ curl -X POST "http://localhost:8000/tryon_extracted" \
 # Upper body
 curl -X POST "http://localhost:8000/tryon_extracted" \
   -F "image=@person.jpg" \
+  -F "cloth=@garment.jpg" \
   -F "mask_type=upper_body" \
   -F "prompt=by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1." \
   --output result_upper.png
@@ -85,6 +87,7 @@ curl -X POST "http://localhost:8000/tryon_extracted" \
 # Lower body
 curl -X POST "http://localhost:8000/tryon_extracted" \
   -F "image=@person.jpg" \
+  -F "cloth=@garment.jpg" \
   -F "mask_type=lower_body" \
   -F "prompt=by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1." \
   --output result_lower.png
@@ -92,6 +95,7 @@ curl -X POST "http://localhost:8000/tryon_extracted" \
 # No masking
 curl -X POST "http://localhost:8000/tryon_extracted" \
   -F "image=@person.jpg" \
+  -F "cloth=@garment.jpg" \
   -F "mask_type=other" \
   -F "prompt=by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1." \
   --output result_other.png
@@ -218,7 +222,8 @@ if __name__ == "__main__":
 4. Click "Try it out"
 
 5. Fill in the form:
-   - Upload an image file
+   - Upload person image file
+   - Upload cloth/garment image file
    - Enter mask_type: `upper_body`, `lower_body`, or `other`
    - Enter prompt text
 
@@ -232,8 +237,9 @@ if __name__ == "__main__":
 
 2. Go to "Body" tab → Select "form-data"
 
-3. Add three fields:
-   - `image` (type: File) → Select your image file
+3. Add four fields:
+   - `image` (type: File) → Select your person image file
+   - `cloth` (type: File) → Select your cloth/garment image file
    - `mask_type` (type: Text) → Enter: `upper_body`
    - `prompt` (type: Text) → Enter your prompt
 
@@ -254,9 +260,9 @@ python api_server.py
 ```
 
 ### 2. Required Files
-- `input/cloth.png` - The garment image to try on
 - All models downloaded (via `download.sh`)
 - StableVITON checkpoints (via `download_stableviton.sh`)
+- Note: Cloth image is now uploaded via API, no need for `input/cloth.png` beforehand
 
 ### 3. Test Image
 - Prepare a person image (PNG or JPEG)

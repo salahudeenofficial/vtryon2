@@ -39,6 +39,7 @@ Virtual try-on endpoint that:
 - Content-Type: multipart/form-data
 - Parameters:
   - `image` (file): Input person image (PNG/JPEG)
+  - `cloth` (file): Cloth/garment image to try on (PNG/JPEG)
   - `mask_type` (string): One of `upper_body`, `lower_body`, or `other`
   - `prompt` (string): Text prompt for virtual try-on
 
@@ -50,6 +51,7 @@ Virtual try-on endpoint that:
 ```bash
 curl -X POST "http://localhost:8000/tryon_extracted" \
   -F "image=@person.jpg" \
+  -F "cloth=@garment.jpg" \
   -F "mask_type=upper_body" \
   -F "prompt=by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1."
 ```
@@ -59,7 +61,10 @@ curl -X POST "http://localhost:8000/tryon_extracted" \
 import requests
 
 url = "http://localhost:8000/tryon_extracted"
-files = {"image": open("person.jpg", "rb")}
+files = {
+    "image": open("person.jpg", "rb"),
+    "cloth": open("garment.jpg", "rb")
+}
 data = {
     "mask_type": "upper_body",
     "prompt": "by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1."
@@ -85,7 +90,7 @@ Health check endpoint.
 
 - The server uses POST for file uploads (standard for multipart/form-data)
 - Temporary files are automatically cleaned up after processing
-- The `cloth.png` image must be present in the `input/` directory
+- The `cloth` image is uploaded via the API and saved to `input/cloth.png` for processing
 - Generated images are saved in the `output/` directory
 - The server includes CORS middleware (configure origins in production)
 

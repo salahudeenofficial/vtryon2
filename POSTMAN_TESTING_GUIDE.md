@@ -28,14 +28,19 @@ http://your-server-ip:8000/tryon_extracted
 
 ### Step 4: Add Form Fields
 
-Add three fields in the form-data section:
+Add four fields in the form-data section:
 
 #### Field 1: `image` (File)
 - **Key**: `image`
 - **Type**: Change from "Text" to **"File"** (click the dropdown next to the key)
 - **Value**: Click **"Select Files"** and choose your person image (PNG or JPEG)
 
-#### Field 2: `mask_type` (Text)
+#### Field 2: `cloth` (File)
+- **Key**: `cloth`
+- **Type**: Change from "Text" to **"File"** (click the dropdown next to the key)
+- **Value**: Click **"Select Files"** and choose your cloth/garment image (PNG or JPEG)
+
+#### Field 3: `mask_type` (Text)
 - **Key**: `mask_type`
 - **Type**: Keep as **"Text"**
 - **Value**: Enter one of:
@@ -43,7 +48,7 @@ Add three fields in the form-data section:
   - `lower_body` (for pants, skirts)
   - `other` (no masking)
 
-#### Field 3: `prompt` (Text)
+#### Field 4: `prompt` (Text)
 - **Key**: `prompt`
 - **Type**: Keep as **"Text"**
 - **Value**: Enter your prompt, for example:
@@ -92,7 +97,8 @@ Add three fields in the form-data section:
 ### Form Fields:
 | Key | Type | Value |
 |-----|------|-------|
-| `image` | File | `person.jpg` (your image file) |
+| `image` | File | `person.jpg` (your person image file) |
+| `cloth` | File | `garment.jpg` (your cloth/garment image file) |
 | `mask_type` | Text | `upper_body` |
 | `prompt` | Text | `by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1.` |
 
@@ -104,6 +110,7 @@ URL: http://localhost:8000/tryon_extracted
 Method: POST
 Body (form-data):
   - image: [person.jpg] (File)
+  - cloth: [garment.jpg] (File)
   - mask_type: upper_body (Text)
   - prompt: by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1. (Text)
 ```
@@ -114,6 +121,7 @@ URL: http://localhost:8000/tryon_extracted
 Method: POST
 Body (form-data):
   - image: [person.jpg] (File)
+  - cloth: [garment.jpg] (File)
   - mask_type: lower_body (Text)
   - prompt: by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1. (Text)
 ```
@@ -347,8 +355,9 @@ pm.test("Response time is less than 120000ms", function () {
 │ Body: form-data                             │
 │                                             │
 │ Fields:                                     │
-│   image      → File (select image)          │
-│   mask_type  → Text (upper_body/lower_body) │
+│   image      → File (select person image)   │
+│   cloth      → File (select garment image) │
+│   mask_type  → Text (upper_body/lower_body)│
 │   prompt     → Text (your prompt)           │
 │                                             │
 │ Timeout: 300 seconds                        │
