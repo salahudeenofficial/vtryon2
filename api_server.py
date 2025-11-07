@@ -86,11 +86,13 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
     masked_person_input_path = INPUT_DIR / masked_person_filename
     shutil.copy2(masked_person_path, masked_person_input_path)
     
-    # Ensure cloth.png exists in input directory
-    # (It should have been saved there by the API endpoint before calling this function)
+    # Ensure cloth.png exists (or use a default)
+    # For now, we'll assume cloth.png is already in input directory
+    # In a full implementation, you might want to accept cloth image as well
     cloth_path = INPUT_DIR / "cloth.png"
     if not cloth_path.exists():
-        raise FileNotFoundError("cloth.png not found in input directory. The cloth image should be uploaded via the API.")
+        # Create a placeholder or raise error
+        raise FileNotFoundError("cloth.png not found in input directory. Please provide a cloth image.")
     
     with torch.inference_mode():
         # Load models
@@ -223,7 +225,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
 @app.post("/tryon_extracted")
 async def tryon_extracted(
     image: UploadFile = File(..., description="Input person image"),
-    cloth: UploadFile = File(None, description="Cloth/garment image to try on (optional, falls back to input/cloth.png)"),
+    cloth: UploadFile = File(..., description="Cloth/garment image to try on"),
     mask_type: str = Form(..., description="Mask type: upper_body, lower_body, or other"),
     prompt: str = Form(..., description="Text prompt for virtual try-on")
 ):
@@ -236,12 +238,6 @@ async def tryon_extracted(
     3. Run workflow_script_serial.py with masked image and prompt
     4. Return the generated image
     """
-    print(f"\n{'='*60}")
-    print(f"📥 Received request: /tryon_extracted")
-    print(f"   mask_type: {mask_type}")
-    print(f"   prompt: {prompt[:50]}..." if len(prompt) > 50 else f"   prompt: {prompt}")
-    print(f"{'='*60}\n")
-    
     # Validate mask_type
     valid_mask_types = ['upper_body', 'lower_body', 'other']
     if mask_type not in valid_mask_types:
@@ -250,36 +246,22 @@ async def tryon_extracted(
             detail=f"mask_type must be one of {valid_mask_types}, got '{mask_type}'"
         )
     
-    # Create temporary files for uploaded images
+    # Create temporary file for uploaded image
     temp_input_path = None
     temp_masked_path = None
-    temp_cloth_path = None
     
     try:
-        print("💾 Saving uploaded images...")
         # Save uploaded person image to temporary file
         temp_input_path = TEMP_DIR / f"input_{os.urandom(8).hex()}.png"
         with open(temp_input_path, "wb") as f:
             shutil.copyfileobj(image.file, f)
-        print(f"✓ Person image saved to: {temp_input_path}")
         
-        # Handle cloth image (uploaded or use existing)
-        temp_cloth_path = INPUT_DIR / "cloth.png"
-        if cloth and cloth.filename:
-            # Save uploaded cloth image to input directory
-            with open(temp_cloth_path, "wb") as f:
-                shutil.copyfileobj(cloth.file, f)
-            print(f"✓ Cloth image uploaded and saved to: {temp_cloth_path}")
-        else:
-            # Check if cloth.png already exists in input directory
-            if not temp_cloth_path.exists():
-                error_msg = f"cloth.png not found in {INPUT_DIR.absolute()}. Please either upload a cloth image or ensure cloth.png exists in the input directory."
-                print(f"❌ {error_msg}")
-                raise HTTPException(status_code=400, detail=error_msg)
-            print(f"✓ Using existing cloth image: {temp_cloth_path}")
+        # Save uploaded cloth image to input directory
+        cloth_path = INPUT_DIR / "cloth.png"
+        with open(cloth_path, "wb") as f:
+            shutil.copyfileobj(cloth.file, f)
         
         # Call masked_image function
-        print(f"🎭 Creating masked image (mask_type: {mask_type})...")
         temp_masked_path = TEMP_DIR / f"masked_{os.urandom(8).hex()}.png"
         masked_image_path = masked_image(
             mask_type=mask_type,
@@ -289,25 +271,19 @@ async def tryon_extracted(
             height=768,
             device_index=0
         )
-        print(f"✓ Masked image created: {masked_image_path}")
         
-        # Run workflow (cloth.png is now in input directory from above)
-        print(f"🔄 Running workflow with prompt...")
+        # Run workflow
         output_filename = f"tryon_{os.urandom(8).hex()}"
         output_image_path = run_workflow_serial(
             masked_person_path=masked_image_path,
             prompt=prompt,
             output_filename=output_filename
         )
-        print(f"✓ Workflow completed. Output: {output_image_path}")
         
         # Return the generated image
         if not Path(output_image_path).exists():
-            error_msg = f"Generated image file not found: {output_image_path}"
-            print(f"❌ {error_msg}")
-            raise HTTPException(status_code=500, detail=error_msg)
+            raise HTTPException(status_code=500, detail="Generated image file not found")
         
-        print(f"✅ Success! Returning image: {output_image_path}")
         return FileResponse(
             output_image_path,
             media_type="image/png",
@@ -315,10 +291,6 @@ async def tryon_extracted(
         )
         
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ Error processing request: {str(e)}")
-        print(f"Full traceback:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
     finally:
@@ -327,10 +299,6 @@ async def tryon_extracted(
             temp_input_path.unlink()
         if temp_masked_path and temp_masked_path.exists():
             temp_masked_path.unlink()
-        # Note: cloth.png is kept in input/ directory for potential reuse
-        # Uncomment below if you want to clean it up after each request:
-        # if temp_cloth_path and temp_cloth_path.exists():
-        #     temp_cloth_path.unlink()
 
 
 @app.get("/health")
