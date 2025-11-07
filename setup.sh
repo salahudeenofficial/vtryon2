@@ -90,22 +90,22 @@ echo ""
 
 # echo ""
 
-# Step 3: Download all models
-echo "Step 3: Downloading all required models..."
-echo "---------------------------------------------------"
-echo "This may take a while depending on your internet connection..."
-echo ""
+# # Step 3: Download all models
+# echo "Step 3: Downloading all required models..."
+# echo "---------------------------------------------------"
+# echo "This may take a while depending on your internet connection..."
+# echo ""
 
-# Run download.sh to download ComfyUI models
-if [ -f "${SCRIPT_DIR}/download.sh" ]; then
-    echo "Running download.sh to download ComfyUI models..."
-    bash "${SCRIPT_DIR}/download.sh"
-    echo "✓ ComfyUI models downloaded"
-else
-    echo "⚠️  download.sh not found, skipping model downloads"
-fi
+# # Run download.sh to download ComfyUI models
+# if [ -f "${SCRIPT_DIR}/download.sh" ]; then
+#     echo "Running download.sh to download ComfyUI models..."
+#     bash "${SCRIPT_DIR}/download.sh"
+#     echo "✓ ComfyUI models downloaded"
+# else
+#     echo "⚠️  download.sh not found, skipping model downloads"
+# fi
 
-echo ""
+# echo ""
 
 
 
