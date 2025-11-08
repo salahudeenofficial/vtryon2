@@ -11,17 +11,58 @@ import sys
 import shutil
 import asyncio
 import threading
+import logging
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add current directory to path for workflow_script_serial
 sys.path.insert(0, str(Path(__file__).parent))
 
-app = FastAPI(title="Qwen Image Edit API", version="1.0.0")
+# Import model cache
+from model_cache import load_models_once, get_cached_model, is_models_loaded
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan context manager.
+    Loads models at startup and keeps them in memory.
+    """
+    # Startup: Load models
+    logger.info("=" * 60)
+    logger.info("FastAPI Startup: Loading models into CPU memory...")
+    logger.info("=" * 60)
+    try:
+        load_models_once()
+        logger.info("=" * 60)
+        logger.info("✓ All models loaded and ready for requests!")
+        logger.info("=" * 60)
+    except Exception as e:
+        logger.error(f"❌ Failed to load models at startup: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
+    
+    yield
+    
+    # Shutdown: Cleanup (optional)
+    logger.info("FastAPI Shutdown: Cleaning up...")
+
+
+app = FastAPI(
+    title="Qwen Image Edit API",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -137,23 +178,27 @@ def run_workflow(
     shutil.copy2(masked_person_image_path, masked_person_input_path)
     shutil.copy2(cloth_image_path, cloth_input_path)
     
+    # Check if models are loaded, if not load them (fallback)
+    if not is_models_loaded():
+        logger.warning("Models not loaded at startup, loading now (this should not happen)")
+        load_models_once()
+    
+    # Get cached models (already loaded and in CPU memory)
+    try:
+        unet_model = get_cached_model("unet")
+        clip_model = get_cached_model("clip")
+        vae_model = get_cached_model("vae")
+        lora_model = get_cached_model("lora")
+    except Exception as e:
+        logger.error(f"Error getting cached models: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise RuntimeError(f"Failed to get cached models: {e}")
+    
     with torch.inference_mode():
-        # Load models
-        unetloader = UNETLoader()
-        unetloader_37 = unetloader.load_unet(
-            unet_name="qwen_image_edit_2509_fp8_e4m3fn.safetensors",
-            weight_dtype="default",
-        )
-
-        cliploader = CLIPLoader()
-        cliploader_38 = cliploader.load_clip(
-            clip_name="qwen_2.5_vl_7b_fp8_scaled.safetensors",
-            type="qwen_image",
-            device="default",
-        )
-
-        vaeloader = VAELoader()
-        vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
+        # Models will be automatically loaded to GPU by ComfyUI when needed
+        # No need to explicitly load them here - ComfyUI's model management handles it
+        # This ensures models stay on CPU until actually needed, saving GPU memory
 
         # Load masked person image
         loadimage = LoadImage()
@@ -171,16 +216,11 @@ def run_workflow(
         vaeencode = VAEEncode()
         vaeencode_88 = vaeencode.encode(
             pixels=get_value_at_index(imagescaletototalpixels_93, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
         )
 
-        # Load LoRA
-        loraloadermodelonly = LoraLoaderModelOnly()
-        loraloadermodelonly_89 = loraloadermodelonly.load_lora_model_only(
-            lora_name="Qwen-Image-Lightning-4steps-V2.0.safetensors",
-            strength_model=1,
-            model=get_value_at_index(unetloader_37, 0),
-        )
+        # LoRA is already loaded and cached
+        loraloadermodelonly_89 = lora_model  # Use cached LoRA model
 
         # Load cloth image
         loadimage_106 = loadimage.load_image(image="cloth.png")
@@ -201,7 +241,7 @@ def run_workflow(
 
         # Apply model sampling
         modelsamplingauraflow_66 = modelsamplingauraflow.patch_aura(
-            shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)
+            shift=3, model=get_value_at_index(loraloadermodelonly_89, 0)  # Use cached LoRA model
         )
 
         cfgnorm_75 = cfgnorm.EXECUTE_NORMALIZED(
@@ -212,8 +252,8 @@ def run_workflow(
         # Positive prompt
         textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt=prompt,
-            clip=get_value_at_index(cliploader_38, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            clip=get_value_at_index(clip_model, 0),  # Use cached CLIP model
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -221,8 +261,8 @@ def run_workflow(
         # Negative prompt (empty)
         textencodeqwenimageeditplus_110 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt="",
-            clip=get_value_at_index(cliploader_38, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            clip=get_value_at_index(clip_model, 0),  # Use cached CLIP model
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -247,7 +287,7 @@ def run_workflow(
         # Decode
         vaedecode_8 = vaedecode.decode(
             samples=get_value_at_index(ksampler_3, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
         )
 
         # Save image
