@@ -34,13 +34,14 @@ def load_models_once() -> None:
             add_extra_model_paths,
             get_value_at_index,
         )
-        from api_server import import_custom_nodes_minimal
         from nodes import (
             UNETLoader,
             CLIPLoader,
             VAELoader,
             LoraLoaderModelOnly,
         )
+        import asyncio
+        from nodes import init_extra_nodes
         
         # Setup ComfyUI paths
         add_comfyui_directory_to_sys_path()
@@ -48,7 +49,23 @@ def load_models_once() -> None:
         
         # Load custom nodes (required before loading models)
         logger.info("Loading custom nodes...")
-        import_custom_nodes_minimal()
+        try:
+            # Try to run in a separate thread to avoid event loop conflicts
+            import threading
+            def run_in_thread():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    new_loop.run_until_complete(init_extra_nodes(init_custom_nodes=True, init_api_nodes=False))
+                finally:
+                    new_loop.close()
+            
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join()
+        except RuntimeError:
+            # No running event loop, safe to use asyncio.run()
+            asyncio.run(init_extra_nodes(init_custom_nodes=True, init_api_nodes=False))
         logger.info("✓ Custom nodes loaded")
         
         # Load models with CPU offload
