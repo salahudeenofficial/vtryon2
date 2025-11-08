@@ -168,8 +168,10 @@ def run_workflow(
     add_comfyui_directory_to_sys_path()
     add_extra_model_paths()
     
-    # Load custom nodes
-    import_custom_nodes_minimal()
+    # Custom nodes are already loaded during model caching at startup
+    # Only load if models weren't loaded at startup (fallback)
+    if not is_models_loaded():
+        import_custom_nodes_minimal()
     
     # Copy images to input directory
     masked_person_input_path = INPUT_DIR / "masked_person.png"
