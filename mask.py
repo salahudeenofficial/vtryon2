@@ -100,55 +100,67 @@ def resize_panel(img: Image.Image, width: int, height: int) -> Image.Image:
 
 def init_preprocessors(use_gpu_device: int = 0):
     """Initialize OpenPose and Parsing preprocessors."""
-    # Ensure paths are set up before importing
+    # Clear and set up paths explicitly to avoid conflicts with model warmup imports
     # Use absolute paths to avoid issues with working directory changes
     stableviton_dir = Path(__file__).absolute().parent / "StableVITON"
     humanparsing_dir = stableviton_dir / "preprocess" / "humanparsing"
     
-    # Ensure both directories are in path (order matters - humanparsing first so utils can be found)
+    # Get absolute path strings
     humanparsing_str = str(humanparsing_dir.absolute())
     stableviton_str = str(stableviton_dir.absolute())
     
-    # Normalize all paths in sys.path for comparison
-    sys_path_normalized = []
-    for p in sys.path:
-        try:
-            sys_path_normalized.append(str(Path(p).absolute()))
-        except (OSError, ValueError):
-            sys_path_normalized.append(str(p))
-    
-    # Remove if already present (check normalized versions to avoid duplicates)
-    if humanparsing_str in sys_path_normalized:
-        idx = sys_path_normalized.index(humanparsing_str)
-        if idx < len(sys.path):
-            sys.path.pop(idx)
-            sys_path_normalized.pop(idx)
-    if stableviton_str in sys_path_normalized:
-        idx = sys_path_normalized.index(stableviton_str)
-        if idx < len(sys.path):
-            sys.path.pop(idx)
-            sys_path_normalized.pop(idx)
-    
-    # Insert at the beginning to ensure they're checked first
-    # humanparsing must be first so utils can be found from any subdirectory
-    sys.path.insert(0, humanparsing_str)
-    sys.path.insert(0, stableviton_str)
-    
-    # Verify the path is correct by checking if utils directory exists
+    # Verify directories exist
+    if not humanparsing_dir.exists():
+        raise RuntimeError(f"humanparsing directory not found at {humanparsing_dir}")
     utils_dir = humanparsing_dir / "utils"
     if not utils_dir.exists():
         raise RuntimeError(f"utils directory not found at {utils_dir}. Please check StableVITON installation.")
     
-    # Double-check that humanparsing is in sys.path (it should be at index 0 or 1)
-    # This ensures utils can be imported from any subdirectory
-    if humanparsing_str not in [str(Path(p).absolute()) if Path(p).exists() else str(p) for p in sys.path[:5]]:
-        sys.path.insert(0, humanparsing_str)
+    # Clear any existing instances of these paths from sys.path
+    # Normalize all paths for accurate comparison
+    paths_to_remove = []
+    for i, p in enumerate(sys.path):
+        try:
+            normalized = str(Path(p).absolute())
+            if normalized == humanparsing_str or normalized == stableviton_str:
+                paths_to_remove.append(i)
+        except (OSError, ValueError):
+            # If path can't be normalized, check string match
+            if p == humanparsing_str or p == stableviton_str:
+                paths_to_remove.append(i)
     
-    # Test that utils can be imported before proceeding
+    # Remove from back to front to preserve indices
+    for i in reversed(paths_to_remove):
+        sys.path.pop(i)
+    
+    # Force masking paths to the very front of sys.path
+    # Order is critical: humanparsing MUST be at index 0 so utils can be found first
+    # Then stableviton at index 1 for preprocess imports
+    # Insert stableviton first, then humanparsing (last insert is at index 0)
+    sys.path.insert(0, stableviton_str)
+    sys.path.insert(0, humanparsing_str)
+    
+    # Verify paths are at the front (humanparsing at 0, stableviton at 1)
+    assert sys.path[0] == humanparsing_str, f"humanparsing path not at front: sys.path[0]={sys.path[0]}"
+    assert sys.path[1] == stableviton_str, f"stableviton path not at position 1: sys.path[1]={sys.path[1]}"
+    
+    # Clear any cached imports that might interfere
+    import importlib
+    if 'utils' in sys.modules:
+        del sys.modules['utils']
+    if 'utils.transforms' in sys.modules:
+        del sys.modules['utils.transforms']
+    
+    # Test that utils can be imported with the clear path setup
     try:
         import utils.transforms
     except ImportError as e:
-        raise RuntimeError(f"Cannot import utils.transforms. humanparsing_dir={humanparsing_str}, sys.path[:3]={sys.path[:3]}, error={e}")
+        raise RuntimeError(
+            f"Cannot import utils.transforms after path setup. "
+            f"humanparsing_dir={humanparsing_str}, "
+            f"sys.path[0:3]={sys.path[0:3]}, "
+            f"error={e}"
+        )
     
     try:
         # Import after path is set up
