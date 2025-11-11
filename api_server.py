@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 # Import mask.py function
 from mask import masked_image
 
+# Import model cache for preloading models
+from model_cache import load_models_once, get_cached_model, is_models_loaded
+
 # Add current directory to path for workflow_script_serial
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -57,9 +60,22 @@ OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Load models on CPU at server startup."""
+    logger.info("Starting server initialization...")
+    try:
+        load_models_once()
+        logger.info("✓ Server initialization complete - all models loaded on CPU and ready")
+    except Exception as e:
+        logger.error(f"Failed to load models at startup: {e}")
+        raise
+
+
 def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: str = "tryon_output") -> str:
     """
     Run the workflow_script_serial.py workflow with given parameters.
+    Uses pre-loaded cached models from startup.
     
     Args:
         masked_person_path: Path to masked person image
@@ -70,25 +86,25 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         Path to the generated output image
     """
     import torch
-    from workflow_script_serial import (
-        import_custom_nodes_minimal,
-        get_value_at_index
-    )
+    from workflow_script_serial import get_value_at_index
     from nodes import (
-        UNETLoader,
-        CLIPLoader,
         SaveImage,
         VAEEncode,
         LoadImage,
         KSampler,
-        VAELoader,
         NODE_CLASS_MAPPINGS,
         VAEDecode,
-        LoraLoaderModelOnly,
     )
     
-    # Load custom nodes
-    import_custom_nodes_minimal()
+    # Ensure models are loaded
+    if not is_models_loaded():
+        raise RuntimeError("Models not loaded. Server may not have initialized properly.")
+    
+    # Get cached models (loaded on CPU at startup)
+    unet_model = get_cached_model("unet")
+    clip_model = get_cached_model("clip")
+    vae_model = get_cached_model("vae")
+    lora_model = get_cached_model("lora_model")
     
     # Copy masked person image to input directory
     masked_person_filename = "masked_person.png"
@@ -104,22 +120,10 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         raise FileNotFoundError("cloth.png not found in input directory. Please provide a cloth image.")
     
     with torch.inference_mode():
-        # Load models
-        unetloader = UNETLoader()
-        unetloader_37 = unetloader.load_unet(
-            unet_name="qwen_image_edit_2509_fp8_e4m3fn.safetensors",
-            weight_dtype="default",
-        )
-
-        cliploader = CLIPLoader()
-        cliploader_38 = cliploader.load_clip(
-            clip_name="qwen_2.5_vl_7b_fp8_scaled.safetensors",
-            type="qwen_image",
-            device="default",
-        )
-
-        vaeloader = VAELoader()
-        vaeloader_39 = vaeloader.load_vae(vae_name="qwen_image_vae.safetensors")
+        # Use cached models (already loaded on CPU)
+        unetloader_37 = (unet_model,)
+        cliploader_38 = (clip_model,)
+        vaeloader_39 = (vae_model,)
 
         # Load masked person image
         loadimage = LoadImage()
@@ -140,13 +144,8 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
             vae=get_value_at_index(vaeloader_39, 0),
         )
 
-        # Load LoRA
-        loraloadermodelonly = LoraLoaderModelOnly()
-        loraloadermodelonly_89 = loraloadermodelonly.load_lora_model_only(
-            lora_name="Qwen-Image-Lightning-4steps-V2.0.safetensors",
-            strength_model=1,
-            model=get_value_at_index(unetloader_37, 0),
-        )
+        # Use cached LoRA model (already loaded)
+        loraloadermodelonly_89 = (lora_model,)
 
         # Load cloth image
         loadimage_106 = loadimage.load_image(image="cloth.png")
