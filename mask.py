@@ -12,12 +12,30 @@ import numpy as np
 import cv2
 
 # Add StableVITON to path for imports
+# Use absolute paths to avoid issues with working directory changes
 stableviton_dir = Path(__file__).absolute().parent / "StableVITON"
-sys.path.insert(0, str(stableviton_dir))
+stableviton_str = str(stableviton_dir.absolute())
 
 # Add preprocess/humanparsing to path so utils.transforms can be imported
+# This must be done before importing any preprocess modules
+# Order matters: humanparsing must be before stableviton so utils can be found
 humanparsing_dir = stableviton_dir / "preprocess" / "humanparsing"
-sys.path.insert(0, str(humanparsing_dir))
+humanparsing_str = str(humanparsing_dir.absolute())
+
+# Normalize paths in sys.path for comparison (handle cases where paths might not exist)
+sys_path_normalized = []
+for p in sys.path:
+    try:
+        sys_path_normalized.append(str(Path(p).absolute()))
+    except (OSError, ValueError):
+        # If path doesn't exist or can't be normalized, use as-is
+        sys_path_normalized.append(str(p))
+
+# Add paths if not already present (check normalized versions)
+if humanparsing_str not in sys_path_normalized:
+    sys.path.insert(0, humanparsing_str)
+if stableviton_str not in sys_path_normalized:
+    sys.path.insert(0, stableviton_str)
 
 # Global cache for preprocessors to avoid re-initialization
 _preprocessors_cache = None
@@ -82,11 +100,33 @@ def resize_panel(img: Image.Image, width: int, height: int) -> Image.Image:
 
 def init_preprocessors(use_gpu_device: int = 0):
     """Initialize OpenPose and Parsing preprocessors."""
+    # Ensure paths are set up before importing
+    # Use absolute paths to avoid issues with working directory changes
+    stableviton_dir = Path(__file__).absolute().parent / "StableVITON"
+    humanparsing_dir = stableviton_dir / "preprocess" / "humanparsing"
+    
+    # Ensure both directories are in path (order matters - humanparsing first so utils can be found)
+    humanparsing_str = str(humanparsing_dir.absolute())
+    stableviton_str = str(stableviton_dir.absolute())
+    
+    # Remove if already present to avoid duplicates
+    if humanparsing_str in sys.path:
+        sys.path.remove(humanparsing_str)
+    if stableviton_str in sys.path:
+        sys.path.remove(stableviton_str)
+    
+    # Insert at the beginning to ensure they're checked first
+    sys.path.insert(0, humanparsing_str)
+    sys.path.insert(0, stableviton_str)
+    
     try:
+        # Import after path is set up
         from preprocess.humanparsing.run_parsing import Parsing  # type: ignore
         from preprocess.openpose.run_openpose import OpenPose  # type: ignore
     except Exception as e:
-        raise RuntimeError(f"StableVITON preprocessors not available: {e}")
+        import traceback
+        error_details = traceback.format_exc()
+        raise RuntimeError(f"StableVITON preprocessors not available: {e}\n\nTraceback:\n{error_details}")
     
     openpose = OpenPose(use_gpu_device)
     try:
