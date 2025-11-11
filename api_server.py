@@ -15,6 +15,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,17 +37,6 @@ from model_cache import load_models_once, get_cached_model, is_models_loaded
 # Add current directory to path for workflow_script_serial
 sys.path.insert(0, str(Path(__file__).parent))
 
-app = FastAPI(title="Virtual Try-On API", version="1.0.0")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Temporary directories
 TEMP_DIR = Path(tempfile.gettempdir()) / "tryon_api"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,16 +50,47 @@ OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Load models on CPU at server startup."""
-    logger.info("Starting server initialization...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan context manager.
+    Loads models at startup and keeps them in memory.
+    """
+    # Startup: Load models
+    logger.info("=" * 60)
+    logger.info("FastAPI Startup: Loading models into CPU memory...")
+    logger.info("=" * 60)
     try:
         load_models_once()
-        logger.info("✓ Server initialization complete - all models loaded on CPU and ready")
+        logger.info("=" * 60)
+        logger.info("✓ All models loaded and ready for requests!")
+        logger.info("=" * 60)
     except Exception as e:
-        logger.error(f"Failed to load models at startup: {e}")
+        logger.error(f"❌ Failed to load models at startup: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise
+    
+    yield
+    
+    # Shutdown: Cleanup (optional)
+    logger.info("FastAPI Shutdown: Cleaning up...")
+
+
+app = FastAPI(
+    title="Virtual Try-On API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: str = "tryon_output") -> str:
@@ -101,10 +122,11 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         raise RuntimeError("Models not loaded. Server may not have initialized properly.")
     
     # Get cached models (loaded on CPU at startup)
+    # These are full loader return values, extract when needed
     unet_model = get_cached_model("unet")
     clip_model = get_cached_model("clip")
     vae_model = get_cached_model("vae")
-    lora_model = get_cached_model("lora_model")
+    lora_model = get_cached_model("lora")
     
     # Copy masked person image to input directory
     masked_person_filename = "masked_person.png"
@@ -120,10 +142,9 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         raise FileNotFoundError("cloth.png not found in input directory. Please provide a cloth image.")
     
     with torch.inference_mode():
-        # Use cached models (already loaded on CPU)
-        unetloader_37 = (unet_model,)
-        cliploader_38 = (clip_model,)
-        vaeloader_39 = (vae_model,)
+        # Models will be automatically loaded to GPU by ComfyUI when needed
+        # No need to explicitly load them here - ComfyUI's model management handles it
+        # This ensures models stay on CPU until actually needed, saving GPU memory
 
         # Load masked person image
         loadimage = LoadImage()
@@ -141,11 +162,11 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         vaeencode = VAEEncode()
         vaeencode_88 = vaeencode.encode(
             pixels=get_value_at_index(imagescaletototalpixels_93, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
         )
 
-        # Use cached LoRA model (already loaded)
-        loraloadermodelonly_89 = (lora_model,)
+        # LoRA is already loaded and cached
+        loraloadermodelonly_89 = lora_model  # Use cached LoRA model
 
         # Load cloth image
         loadimage_106 = loadimage.load_image(image="cloth.png")
@@ -177,8 +198,8 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Positive prompt
         textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt=prompt,
-            clip=get_value_at_index(cliploader_38, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            clip=get_value_at_index(clip_model, 0),  # Use cached CLIP model
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -186,8 +207,8 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Negative prompt (empty)
         textencodeqwenimageeditplus_110 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
             prompt="",
-            clip=get_value_at_index(cliploader_38, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            clip=get_value_at_index(clip_model, 0),  # Use cached CLIP model
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
             image1=get_value_at_index(imagescaletototalpixels_93, 0),
             image2=get_value_at_index(loadimage_106, 0),
         )
@@ -210,7 +231,7 @@ def run_workflow_serial(masked_person_path: str, prompt: str, output_filename: s
         # Decode
         vaedecode_8 = vaedecode.decode(
             samples=get_value_at_index(ksampler_3, 0),
-            vae=get_value_at_index(vaeloader_39, 0),
+            vae=get_value_at_index(vae_model, 0),  # Use cached VAE model
         )
 
         # Save image
