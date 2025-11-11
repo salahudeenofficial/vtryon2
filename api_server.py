@@ -253,7 +253,7 @@ async def tryon_extracted(
     image: UploadFile = File(..., description="Input person image"),
     cloth: UploadFile = File(..., description="Cloth/garment image to try on"),
     mask_type: str = Form(..., description="Mask type: upper_body, lower_body, or other"),
-    prompt: str = Form(..., description="Text prompt for virtual try-on")
+    prompt: Optional[str] = Form(None, description="Text prompt for virtual try-on (ignored - prompt is hardcoded based on mask_type)")
 ):
     """
     Virtual try-on endpoint.
@@ -261,8 +261,12 @@ async def tryon_extracted(
     Process:
     1. Save uploaded image temporarily
     2. Call masked_image() to create masked person image
-    3. Run workflow_script_serial.py with masked image and prompt
+    3. Run workflow_script_serial.py with masked image and hardcoded prompt (based on mask_type)
     4. Return the generated image
+    
+    Note: Prompt is automatically set based on mask_type:
+    - upper_body/lower_body: "by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1."
+    - other: "tryon the garment in the Picture 2 on the person in Picture 1 .Dont't change the style and appearence of the garment and keep the garment look identical. "
     """
     # Validate mask_type
     valid_mask_types = ['upper_body', 'lower_body', 'other']
@@ -271,6 +275,12 @@ async def tryon_extracted(
             status_code=400,
             detail=f"mask_type must be one of {valid_mask_types}, got '{mask_type}'"
         )
+    
+    # Hardcode prompt based on mask_type
+    if mask_type in ['upper_body', 'lower_body']:
+        prompt = "by using the green masked area from Picture 3 as a reference for position place the garment from Picture 2 on the person from Picture 1."
+    else:  # mask_type == 'other'
+        prompt = "tryon the garment in the Picture 2 on the person in Picture 1 .Dont't change the style and appearence of the garment and keep the garment look identical. "
     
     # Create temporary file for uploaded image
     temp_input_path = None
