@@ -11,12 +11,21 @@ import os
 import sys
 import tempfile
 import shutil
+import time
+import logging
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import mask.py function
 from mask import masked_image
@@ -282,6 +291,9 @@ async def tryon_extracted(
     else:  # mask_type == 'other'
         prompt = "tryon the garment in the Picture 2 on the person in Picture 1 .Dont't change the style and appearence of the garment and keep the garment look identical. "
     
+    # Record start time for request timing
+    start_time = time.perf_counter()
+    
     # Create temporary file for uploaded image
     temp_input_path = None
     temp_masked_path = None
@@ -330,6 +342,11 @@ async def tryon_extracted(
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
     finally:
+        # Calculate and log request processing time
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        logger.info(f"Request completed - mask_type: {mask_type}, time_taken: {elapsed_time:.2f} seconds ({elapsed_time*1000:.2f} ms)")
+        
         # Clean up temporary files
         if temp_input_path and temp_input_path.exists():
             temp_input_path.unlink()
