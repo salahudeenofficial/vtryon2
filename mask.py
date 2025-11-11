@@ -109,18 +109,50 @@ def init_preprocessors(use_gpu_device: int = 0):
     humanparsing_str = str(humanparsing_dir.absolute())
     stableviton_str = str(stableviton_dir.absolute())
     
-    # Remove if already present to avoid duplicates
-    if humanparsing_str in sys.path:
-        sys.path.remove(humanparsing_str)
-    if stableviton_str in sys.path:
-        sys.path.remove(stableviton_str)
+    # Normalize all paths in sys.path for comparison
+    sys_path_normalized = []
+    for p in sys.path:
+        try:
+            sys_path_normalized.append(str(Path(p).absolute()))
+        except (OSError, ValueError):
+            sys_path_normalized.append(str(p))
+    
+    # Remove if already present (check normalized versions to avoid duplicates)
+    if humanparsing_str in sys_path_normalized:
+        idx = sys_path_normalized.index(humanparsing_str)
+        if idx < len(sys.path):
+            sys.path.pop(idx)
+            sys_path_normalized.pop(idx)
+    if stableviton_str in sys_path_normalized:
+        idx = sys_path_normalized.index(stableviton_str)
+        if idx < len(sys.path):
+            sys.path.pop(idx)
+            sys_path_normalized.pop(idx)
     
     # Insert at the beginning to ensure they're checked first
+    # humanparsing must be first so utils can be found from any subdirectory
     sys.path.insert(0, humanparsing_str)
     sys.path.insert(0, stableviton_str)
     
+    # Verify the path is correct by checking if utils directory exists
+    utils_dir = humanparsing_dir / "utils"
+    if not utils_dir.exists():
+        raise RuntimeError(f"utils directory not found at {utils_dir}. Please check StableVITON installation.")
+    
+    # Double-check that humanparsing is in sys.path (it should be at index 0 or 1)
+    # This ensures utils can be imported from any subdirectory
+    if humanparsing_str not in [str(Path(p).absolute()) if Path(p).exists() else str(p) for p in sys.path[:5]]:
+        sys.path.insert(0, humanparsing_str)
+    
+    # Test that utils can be imported before proceeding
+    try:
+        import utils.transforms
+    except ImportError as e:
+        raise RuntimeError(f"Cannot import utils.transforms. humanparsing_dir={humanparsing_str}, sys.path[:3]={sys.path[:3]}, error={e}")
+    
     try:
         # Import after path is set up
+        # The path should now be correct for all nested imports
         from preprocess.humanparsing.run_parsing import Parsing  # type: ignore
         from preprocess.openpose.run_openpose import OpenPose  # type: ignore
     except Exception as e:
