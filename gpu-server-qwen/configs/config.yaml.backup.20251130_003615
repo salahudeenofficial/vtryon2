@@ -1,0 +1,24 @@
+server:
+  node_id: "qwen-gpu-1"
+
+security:
+  internal_auth_token: "TEST_BRIDGE_TO_GPU_SECRET"
+
+asset_service:
+  # Update this with your ngrok URL after running: ngrok http 8001
+  # Get the URL from ngrok output: https://YOUR_ID.ngrok-free.app
+  # Example: "https://abc123.ngrok-free.app/v1/vton/result"
+  # Or use: curl http://localhost:4040/api/tunnels to get the URL programmatically
+  callback_url: "https://YOUR_NGROK_URL.ngrok-free.app/v1/vton/result"
+  internal_auth_token: "TEST_GPU_TO_ASSET_SECRET"
+  timeout: 10
+  retries: 3
+
+model:
+  model_type: "qwen"
+  model_version: "1.0.0"
+  device: "cuda"
+
+logging:
+  level: "INFO"
+
