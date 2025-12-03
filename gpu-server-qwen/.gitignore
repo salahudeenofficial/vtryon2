@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Config backups
+*.backup.*
+config.yaml.backup.*
+
+# Model files (if large)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Temporary files
+*.tmp
+*.temp
+
