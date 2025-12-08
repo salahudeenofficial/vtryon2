@@ -13,3 +13,6 @@ model:
   device: cuda
 logging:
   level: INFO
+load_balancer:
+  url: "http://your-lb-host:9000"  # Your Load Balancer URL
+  internal_auth_token: "YOUR_LB_SECRET"  # Optional, if LB auth enabled
