@@ -66,9 +66,11 @@ model:
 python run_server.py
 ```
 
-Or using uvicorn directly:
+**Note:** Do not use `uvicorn` directly from the command line, as it may conflict with ComfyUI's main.py. Always use `python run_server.py` instead.
+
+If you need to use uvicorn directly, use the Python module syntax:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### Docker
