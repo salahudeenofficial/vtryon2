@@ -41,12 +41,12 @@ def validate_image_file(file_path: str) -> Tuple[bool, Optional[str]]:
         return False, f"Invalid image file: {str(e)}"
 
 
-def save_uploaded_file(uploaded_file, temp_dir: Optional[str] = None) -> str:
+def save_uploaded_file(content: bytes, temp_dir: Optional[str] = None) -> str:
     """
-    Save uploaded file to temporary location.
+    Save uploaded file content to temporary location.
     
     Args:
-        uploaded_file: FastAPI UploadFile
+        content: File content as bytes
         temp_dir: Temporary directory (uses system temp if None)
         
     Returns:
@@ -58,11 +58,7 @@ def save_uploaded_file(uploaded_file, temp_dir: Optional[str] = None) -> str:
     temp_path = Path(temp_dir) / f"upload_{os.urandom(8).hex()}.tmp"
     
     with open(temp_path, "wb") as f:
-        content = uploaded_file.file.read()
         f.write(content)
-    
-    # Reset file pointer
-    uploaded_file.file.seek(0)
     
     return str(temp_path)
 

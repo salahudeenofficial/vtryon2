@@ -185,10 +185,14 @@ async def process_inference_async(
             job_id=job_id
         )
         
+        # Read file content asynchronously first
+        masked_content = await masked_user_image.read()
+        garment_content = await garment_image.read()
+        
         # Save uploaded files temporarily (run in executor to avoid blocking)
         loop = asyncio.get_event_loop()
-        temp_masked_path = await loop.run_in_executor(None, save_uploaded_file, masked_user_image)
-        temp_garment_path = await loop.run_in_executor(None, save_uploaded_file, garment_image)
+        temp_masked_path = await loop.run_in_executor(None, save_uploaded_file, masked_content)
+        temp_garment_path = await loop.run_in_executor(None, save_uploaded_file, garment_content)
         
         # Validate images (run in executor to avoid blocking)
         is_valid, error_msg = await loop.run_in_executor(None, validate_image_file, temp_masked_path)
