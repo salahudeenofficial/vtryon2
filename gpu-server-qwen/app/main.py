@@ -89,8 +89,8 @@ app.add_middleware(
 @app.middleware("http")
 async def check_models_loaded(request: Request, call_next):
     """Reject traffic until models are loaded."""
-    # Allow health check even if models not loaded
-    if request.url.path == "/health":
+    # Allow health and test endpoints even if models not loaded (for LB probes)
+    if request.url.path in ["/health", "/test"]:
         return await call_next(request)
     
     if not is_models_loaded():

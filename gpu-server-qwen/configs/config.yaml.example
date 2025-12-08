@@ -4,6 +4,11 @@ server:
 security:
   internal_auth_token: "TEST_BRIDGE_TO_GPU_SECRET"
 
+load_balancer:
+  # Load Balancer URL (optional - if not set, job_complete callbacks are skipped)
+  url: "http://localhost:9000"
+  internal_auth_token: "TEST_GPU_TO_LB_SECRET"  # Optional, if LB auth enabled
+
 asset_service:
   # Update this with your ngrok URL after running: ngrok http 8001
   # Example: "https://abc123.ngrok-free.app/v1/vton/result"
@@ -19,4 +24,5 @@ model:
 
 logging:
   level: "INFO"
+
 

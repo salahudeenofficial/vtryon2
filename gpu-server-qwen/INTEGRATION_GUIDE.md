@@ -124,13 +124,12 @@ X-Internal-Auth: <BRIDGE_TO_GPU_SECRET>
 
 ### GET /health
 
-Health check endpoint. No authentication required.
+Liveness probe endpoint for Load Balancer. No authentication required.
 
 **Response:**
 ```json
 {
   "status": "ok",
-  "gpu_available": true,
   "model_loaded": true,
   "node_id": "qwen-gpu-1"
 }
@@ -138,9 +137,46 @@ Health check endpoint. No authentication required.
 
 **Fields:**
 - `status`: Always `"ok"` if server is running
-- `gpu_available`: Whether CUDA GPU is available
 - `model_loaded`: Whether models are loaded into memory
 - `node_id`: GPU node identifier
+
+**Requirements:**
+- Must respond within 0.3 seconds (health_timeout)
+- Used by Load Balancer to detect if node is alive
+
+### GET /test
+
+Readiness probe endpoint for Load Balancer. No authentication required.
+
+**Response (when ready):**
+```json
+{
+  "status": "hot",
+  "model_loaded": true,
+  "node_id": "qwen-gpu-1",
+  "model_type": "qwen"
+}
+```
+
+**Response (when not ready):**
+```json
+{
+  "status": "loading",
+  "model_loaded": false,
+  "node_id": "qwen-gpu-1"
+}
+```
+
+**Fields:**
+- `status`: `"hot"` when ready for inference, `"loading"` when models not loaded
+- `model_loaded`: Whether models are loaded into memory (must be `true` for HOT state)
+- `node_id`: GPU node identifier
+- `model_type`: Model type (only present when `status: "hot"`)
+
+**Requirements:**
+- Must respond within 0.3 seconds (health_timeout)
+- `model_loaded: true` is required for node to be marked HOT by Load Balancer
+- Used by Load Balancer to determine if node is ready to accept jobs
 
 ### GET /version
 
@@ -174,11 +210,13 @@ Prometheus-style metrics. No authentication required.
 
 ## Request Flow
 
-1. **CPU Bridge** (via Load Balancer) → `POST /tryon` with job data
-2. **GPU Server** → Returns `202 Accepted` immediately
-3. **GPU Server** → Processes inference asynchronously
-4. **GPU Server** → `POST` to Asset Service callback URL with results
-5. **Asset Service** → Returns `200 OK` to acknowledge receipt
+1. **Load Balancer** → `GET /test` to check if node is ready (HOT)
+2. **CPU Bridge** (via Load Balancer) → `POST /tryon` with job data
+3. **GPU Server** → Returns `202 Accepted` immediately
+4. **GPU Server** → Processes inference asynchronously
+5. **GPU Server** → `POST` to Asset Service callback URL with results
+6. **GPU Server** → `POST` to Load Balancer `/job_complete` to notify job finished
+7. **Asset Service** → Returns `200 OK` to acknowledge receipt
 
 ## Error Scenarios
 
@@ -202,12 +240,41 @@ Prometheus-style metrics. No authentication required.
 - If all retries fail, error is logged
 - Job is still marked complete
 
+## Load Balancer Integration
+
+The GPU server automatically notifies the Load Balancer when jobs complete.
+
+### Job Completion Callback
+
+After every job (success or failure), the server calls:
+```
+POST {LB_URL}/job_complete
+Content-Type: application/json
+X-Internal-Auth: <LB_AUTH_TOKEN>  (if configured)
+```
+
+**Request Body:**
+```json
+{
+  "node_id": "qwen-gpu-1",
+  "job_id": "dd1283e6-91a9-4f40-851e-8687a5d557dd",
+  "metadata": {}
+}
+```
+
+**Requirements:**
+- Called automatically after every job completion
+- Non-blocking (timeout: 5 seconds)
+- If LB URL not configured, callback is skipped (no error)
+
 ## Configuration
 
 All configuration is in `configs/config.yaml`:
 
 - `server.node_id`: Unique identifier for this GPU node
 - `security.internal_auth_token`: Secret for CPU Bridge requests
+- `load_balancer.url`: (Optional) Load Balancer URL for job_complete callbacks
+- `load_balancer.internal_auth_token`: (Optional) Auth token for LB callbacks
 - `asset_service.callback_url`: URL to send inference results
 - `asset_service.internal_auth_token`: Secret for Asset Service callbacks
 - `asset_service.timeout`: Callback timeout in seconds (default: 10)

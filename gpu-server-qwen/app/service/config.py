@@ -133,3 +133,13 @@ def get_log_level() -> str:
     """Get logging level."""
     return get_config().get("logging", {}).get("level", "INFO")
 
+
+def get_lb_url() -> Optional[str]:
+    """Get Load Balancer URL (optional)."""
+    return get_config().get("load_balancer", {}).get("url")
+
+
+def get_lb_auth_token() -> Optional[str]:
+    """Get Load Balancer auth token (optional)."""
+    return get_config().get("load_balancer", {}).get("internal_auth_token")
+

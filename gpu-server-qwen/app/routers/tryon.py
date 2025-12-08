@@ -18,6 +18,7 @@ from app.service.scheduler import get_scheduler
 from app.service.config import get_node_id
 from app.service.inference import run_inference
 from app.service.asset_callback import send_callback, send_error_callback
+from app.service.lb_callback import send_job_complete
 from app.service.utils_image import validate_image_file, save_uploaded_file, cleanup_file
 from app.service.logger import log_event
 from models.request_models import TryonResponse
@@ -248,6 +249,9 @@ async def process_inference_async(
         # Mark job as complete
         scheduler = get_scheduler()
         scheduler.complete_job(job_id)
+        
+        # Notify Load Balancer that job is complete
+        await send_job_complete(job_id=job_id)
         
         log_event(
             logger,
