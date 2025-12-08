@@ -7,6 +7,8 @@ import sys
 import time
 import torch
 import random
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Tuple, Optional
 import logging
@@ -31,8 +33,19 @@ from nodes import (
 
 logger = logging.getLogger(__name__)
 
+# Thread pool executor for running CPU-bound inference operations
+_inference_executor: Optional[ThreadPoolExecutor] = None
 
-async def run_inference(
+
+def _get_inference_executor() -> ThreadPoolExecutor:
+    """Get or create thread pool executor for inference."""
+    global _inference_executor
+    if _inference_executor is None:
+        _inference_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
+    return _inference_executor
+
+
+def _run_inference_sync(
     masked_user_image_path: str,
     garment_image_path: str,
     prompt: str,
@@ -42,22 +55,8 @@ async def run_inference(
     cfg: float = 1.0,
 ) -> Tuple[str, float]:
     """
-    Run Qwen Image Edit inference workflow.
-    
-    Args:
-        masked_user_image_path: Path to masked user image
-        garment_image_path: Path to garment image
-        prompt: Text prompt for the workflow
-        output_dir: Output directory for results
-        seed: Optional random seed
-        steps: Number of sampling steps
-        cfg: CFG scale
-        
-    Returns:
-        Tuple of (output_image_path, inference_time_ms)
-        
-    Raises:
-        RuntimeError: If models not loaded or inference fails
+    Synchronous inference function (runs in thread pool).
+    This is the actual inference logic that blocks on GPU operations.
     """
     if not is_models_loaded():
         raise RuntimeError("Models not loaded. Call load_models_once() first.")
@@ -228,4 +227,53 @@ async def run_inference(
     except Exception as e:
         logger.error(f"Inference failed: {e}", exc_info=True)
         raise RuntimeError(f"Inference failed: {str(e)}") from e
+
+
+async def run_inference(
+    masked_user_image_path: str,
+    garment_image_path: str,
+    prompt: str,
+    output_dir: str = "output",
+    seed: Optional[int] = None,
+    steps: int = 4,
+    cfg: float = 1.0,
+) -> Tuple[str, float]:
+    """
+    Run Qwen Image Edit inference workflow asynchronously.
+    
+    This function runs the actual inference in a thread pool executor to avoid
+    blocking the async event loop. PyTorch operations are CPU/GPU bound and
+    should not run directly in the async event loop.
+    
+    Args:
+        masked_user_image_path: Path to masked user image
+        garment_image_path: Path to garment image
+        prompt: Text prompt for the workflow
+        output_dir: Output directory for results
+        seed: Optional random seed
+        steps: Number of sampling steps
+        cfg: CFG scale
+        
+    Returns:
+        Tuple of (output_image_path, inference_time_ms)
+        
+    Raises:
+        RuntimeError: If models not loaded or inference fails
+    """
+    # Run the synchronous inference function in a thread pool executor
+    # This prevents blocking the async event loop
+    loop = asyncio.get_event_loop()
+    executor = _get_inference_executor()
+    
+    return await loop.run_in_executor(
+        executor,
+        _run_inference_sync,
+        masked_user_image_path,
+        garment_image_path,
+        prompt,
+        output_dir,
+        seed,
+        steps,
+        cfg,
+    )
 

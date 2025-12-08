@@ -185,16 +185,17 @@ async def process_inference_async(
             job_id=job_id
         )
         
-        # Save uploaded files temporarily
-        temp_masked_path = save_uploaded_file(masked_user_image)
-        temp_garment_path = save_uploaded_file(garment_image)
+        # Save uploaded files temporarily (run in executor to avoid blocking)
+        loop = asyncio.get_event_loop()
+        temp_masked_path = await loop.run_in_executor(None, save_uploaded_file, masked_user_image)
+        temp_garment_path = await loop.run_in_executor(None, save_uploaded_file, garment_image)
         
-        # Validate images
-        is_valid, error_msg = validate_image_file(temp_masked_path)
+        # Validate images (run in executor to avoid blocking)
+        is_valid, error_msg = await loop.run_in_executor(None, validate_image_file, temp_masked_path)
         if not is_valid:
             raise ValueError(f"Invalid masked_user_image: {error_msg}")
         
-        is_valid, error_msg = validate_image_file(temp_garment_path)
+        is_valid, error_msg = await loop.run_in_executor(None, validate_image_file, temp_garment_path)
         if not is_valid:
             raise ValueError(f"Invalid garment_image: {error_msg}")
         
