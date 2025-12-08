@@ -15,10 +15,10 @@ class TryonRequest(BaseModel):
 
 
 class TryonResponse(BaseModel):
-    """Response model for /tryon endpoint."""
+    """Response model for /tryon endpoint (202 Accepted)."""
+    status: str  # "accepted" (lowercase per CPU Bridge spec)
+    message: str  # "Job queued for processing"
     job_id: str
-    status: str
-    node_id: str
 
 
 class GPUStatusResponse(BaseModel):

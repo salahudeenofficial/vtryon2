@@ -36,7 +36,7 @@ async def tryon(
     provider: str = Form(...),
     masked_user_image: UploadFile = File(...),
     garment_image: UploadFile = File(...),
-    config: Optional[str] = Form(None),
+    config: str = Form(...),
 ):
     """
     Virtual try-on endpoint.
@@ -82,13 +82,12 @@ async def tryon(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
-                "job_id": job_id,
-                "status": "REJECTED_BUSY",
-                "node_id": get_node_id(),
-                "message": "GPU is busy. Try another node."
+                "status": "busy",
+                "message": "GPU server is currently busy",
+                "retry_after": 5
             },
             headers={
-                "Retry-After": "1",
+                "Retry-After": "5",
                 "X-Node-Id": get_node_id()
             }
         )
@@ -105,13 +104,12 @@ async def tryon(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
-                "job_id": job_id,
-                "status": "REJECTED_BUSY",
-                "node_id": get_node_id(),
-                "message": "GPU is busy. Try another node."
+                "status": "busy",
+                "message": "GPU server is currently busy",
+                "retry_after": 5
             },
             headers={
-                "Retry-After": "1",
+                "Retry-After": "5",
                 "X-Node-Id": get_node_id()
             }
         )
@@ -123,13 +121,12 @@ async def tryon(
         job_id=job_id
     )
     
-    # Parse config if provided
+    # Parse config (required per CPU Bridge spec)
     inference_config = {}
-    if config:
-        try:
-            inference_config = json.loads(config)
-        except json.JSONDecodeError:
-            logger.warning(f"Invalid config JSON for job {job_id}, using defaults")
+    try:
+        inference_config = json.loads(config)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid config JSON for job {job_id}, using defaults")
     
     # Start background task
     asyncio.create_task(
@@ -146,11 +143,11 @@ async def tryon(
         )
     )
     
-    # Return 202 immediately
+    # Return 202 immediately (per CPU Bridge spec)
     return TryonResponse(
-        job_id=job_id,
-        status="ACCEPTED",
-        node_id=get_node_id()
+        status="accepted",
+        message="Job queued for processing",
+        job_id=job_id
     )
 
 
