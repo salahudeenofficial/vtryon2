@@ -3,7 +3,7 @@ server:
 security:
   internal_auth_token: TEST_BRIDGE_TO_GPU_SECRET
 asset_service:
-  callback_url: https://bayleigh-irritable-distractingly.ngrok-free.dev/v1/vton/result
+  callback_url: https://13.60.242.64:9009/v1/vton/result
   internal_auth_token: TEST_GPU_TO_ASSET_SECRET
   timeout: 10
   retries: 3
@@ -14,5 +14,5 @@ model:
 logging:
   level: INFO
 load_balancer:
-  url: "http://your-lb-host:9000"  # Your Load Balancer URL
+  url: "http://13.60.242.64:9005"  # Your Load Balancer URL
   internal_auth_token: "YOUR_LB_SECRET"  # Optional, if LB auth enabled
