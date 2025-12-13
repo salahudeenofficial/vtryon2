@@ -10,6 +10,27 @@ from typing import Dict, Any, Optional
 from app.service.config import get_node_id, get_log_level
 
 
+class HealthCheckFilter(logging.Filter):
+    """Filter to exclude health check endpoints from access logs."""
+    
+    # Endpoints to filter out from logs
+    FILTERED_PATHS = ["/health", "/test"]
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        """
+        Return False to exclude the log record, True to include it.
+        """
+        message = record.getMessage()
+        
+        # Check if this is an access log for health/test endpoints
+        for path in self.FILTERED_PATHS:
+            # Match patterns like: GET /health HTTP or "GET /health HTTP"
+            if f"GET {path} HTTP" in message or f"GET {path} " in message:
+                return False
+        
+        return True
+
+
 class JSONFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
     
@@ -47,9 +68,17 @@ def setup_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter())
     
+    # Add filter to exclude health check endpoints from logs
+    health_filter = HealthCheckFilter()
+    handler.addFilter(health_filter)
+    
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, get_log_level().upper(), logging.INFO))
     root_logger.addHandler(handler)
+    
+    # Also filter uvicorn access logs specifically
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    uvicorn_access_logger.addFilter(health_filter)
     
     # Prevent duplicate logs
     root_logger.propagate = False
