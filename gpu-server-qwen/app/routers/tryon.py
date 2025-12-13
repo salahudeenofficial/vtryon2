@@ -122,14 +122,13 @@ async def tryon(
         job_id=job_id
     )
     
-    # Parse config (required per CPU Bridge spec)
-    inference_config = {}
-    try:
-        inference_config = json.loads(config)
-    except json.JSONDecodeError:
-        logger.warning(f"Invalid config JSON for job {job_id}, using defaults")
+    # Config from request is ignored - using fixed values
+    # steps=4 is always used regardless of request config
     
-    # Start background task
+    # Default prompt (fixed)
+    default_prompt = "将图片 1 中的绿色遮罩区域仅用于判断服装属于上半身或下半身，不要将服装限制在遮罩范围内。\n\n将图片 2 中的服装自然地穿戴到图片 1 中的人物身上，保持图片 2 中服装的完整形状、袖长和轮廓。无论图片 2 是单独的服装图还是人物穿着该服装的图，都应准确地转移服装，同时保留其原始面料质感、材质细节和颜色准确性。\n\n确保图片 1 中人物的面部、头发和皮肤完全保持不变。光照与阴影应自然匹配图片 1 的环境，但服装的材质外观必须忠实于图片 2。\n\n保持边缘平滑融合、阴影逼真，整体效果自然且不改变人物的身份特征"
+    
+    # Start background task with fixed values
     asyncio.create_task(
         process_inference_async(
             job_id=job_id,
@@ -137,10 +136,10 @@ async def tryon(
             session_id=session_id,
             masked_user_image=masked_user_image,
             garment_image=garment_image,
-            prompt=inference_config.get("prompt", "将图片 1 中的绿色遮罩区域仅用于判断服装属于上半身或下半身，不要将服装限制在遮罩范围内。\n\n将图片 2 中的服装自然地穿戴到图片 1 中的人物身上，保持图片 2 中服装的完整形状、袖长和轮廓。无论图片 2 是单独的服装图还是人物穿着该服装的图，都应准确地转移服装，同时保留其原始面料质感、材质细节和颜色准确性。\n\n确保图片 1 中人物的面部、头发和皮肤完全保持不变。光照与阴影应自然匹配图片 1 的环境，但服装的材质外观必须忠实于图片 2。\n\n保持边缘平滑融合、阴影逼真，整体效果自然且不改变人物的身份特征"),
-            seed=inference_config.get("seed"),
-            steps=inference_config.get("steps", 4),
-            cfg=inference_config.get("cfg", 1.0),
+            prompt=default_prompt,
+            seed=None,  # Random seed
+            steps=4,    # Fixed: always 4 steps
+            cfg=1.0,    # Fixed: always 1.0
         )
     )
     
