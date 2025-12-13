@@ -1,7 +1,7 @@
 server:
   node_id: qwen-gpu-1
 security:
-  internal_auth_token: 123
+  internal_auth_token: "123"
 asset_service:
   callback_url: https://13.60.242.64:9009/v1/vton/result
   internal_auth_token: supersecret-internal-token
