@@ -50,8 +50,8 @@ async def tryon(
         429 Too Many Requests if GPU busy
         401 Unauthorized if auth fails
     """
-    # Require internal auth
-    await require_internal_auth(request)
+    # Internal auth disabled
+    # await require_internal_auth(request)
     
     # Validate provider
     if provider != "qwen":
