@@ -3,7 +3,7 @@ server:
 security:
   internal_auth_token: "123"
 asset_service:
-  callback_url: http://13.60.242.64:9009/v1/vton/result
+  callback_url: http://51.20.86.26:9009/v1/vton/result
   internal_auth_token: supersecret-internal-token
   timeout: 10
   retries: 3
@@ -14,5 +14,5 @@ model:
 logging:
   level: INFO
 load_balancer:
-  url: "http://13.60.242.64:9005"  # Your Load Balancer URL
+  url: "http://51.20.86.26:9005"  # Your Load Balancer URL
   internal_auth_token: "YOUR_LB_SECRET"  # Optional, if LB auth enabled
