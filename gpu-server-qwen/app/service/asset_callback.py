@@ -86,7 +86,7 @@ async def send_callback(
     try:
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
+                async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
                     response = await client.post(
                         callback_url,
                         data=data,
