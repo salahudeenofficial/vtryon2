@@ -27,7 +27,6 @@ from nodes import (
     VAEEncode,
     KSampler,
     VAEDecode,
-    VAEDecodeTiled,  # OPTIMIZATION: Tiled VAE decoding for better performance
     SaveImage,
     NODE_CLASS_MAPPINGS,
 )
@@ -138,8 +137,8 @@ def _run_inference_sync(
             modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
             cfgnorm = NODE_CLASS_MAPPINGS["CFGNorm"]()
             ksampler = KSampler()
-            # OPTIMIZATION: Use tiled VAE decoding for better performance and memory efficiency
-            vaedecode_tiled = VAEDecodeTiled()
+            # Use standard VAE decode (faster for 1024x1024 images)
+            vaedecode = VAEDecode()
             saveimage = SaveImage()
             
             # Apply model sampling
@@ -193,12 +192,10 @@ def _run_inference_sync(
             )
             
             
-            # OPTIMIZATION: Use tiled VAE decoding for faster processing
-            vaedecode_8 = vaedecode_tiled.decode(
+            # Decode latents to image
+            vaedecode_8 = vaedecode.decode(
                 samples=get_value_at_index(ksampler_3, 0),
                 vae=get_value_at_index(vae_model, 0),
-                tile_size=512,  # Optimal tile size for performance
-                overlap=64,     # Overlap for seamless stitching
             )
             
             # Save image
