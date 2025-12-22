@@ -1,12 +1,6 @@
 """
 Model caching module for Qwen Image Edit API.
 Loads models once at startup and keeps them in CPU memory.
-
-OPTIMIZATIONS ENABLED:
-- torch.compile() for model compilation (20-50% speedup after warmup)
-- Flash Attention for faster attention operations
-- --fast performance features (fp16_accumulation, autotune)
-- Warmup inference to pre-compile CUDA kernels
 """
 import torch
 import logging
@@ -15,30 +9,9 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# OPTIMIZATION: Enable --fast performance features via environment variables
-# ============================================================================
-# These are set before importing comfy modules to ensure they take effect
-
-# Enable FP16 accumulation for faster matmul (slight quality tradeoff)
-os.environ.setdefault("COMFY_FAST_FP16_ACCUMULATION", "1")
-
-# Enable cuDNN benchmark for auto-tuning convolutions
-os.environ.setdefault("COMFY_FAST_AUTOTUNE", "1")
-
-# Enable Flash Attention if available
-os.environ.setdefault("COMFY_USE_FLASH_ATTENTION", "1")
-
 # Global model cache
 _model_cache: Dict[str, Any] = {}
 _models_loaded = False
-_warmup_complete = False
-
-# ============================================================================
-# OPTIMIZATION: torch.compile configuration
-# ============================================================================
-ENABLE_TORCH_COMPILE = True  # Set to False to disable compilation
-TORCH_COMPILE_MODE = "reduce-overhead"  # Options: "default", "reduce-overhead", "max-autotune"
 
 
 def load_models_once() -> None:
@@ -70,33 +43,6 @@ def load_models_once() -> None:
         )
         import asyncio
         from nodes import init_extra_nodes
-        
-        # ============================================================================
-        # OPTIMIZATION: Enable Flash Attention and cuDNN benchmark
-        # ============================================================================
-        try:
-            # Enable PyTorch SDPA (Scaled Dot Product Attention) optimizations
-            torch.backends.cuda.enable_math_sdp(True)
-            torch.backends.cuda.enable_flash_sdp(True)
-            torch.backends.cuda.enable_mem_efficient_sdp(True)
-            logger.info("✓ PyTorch SDPA/Flash Attention enabled")
-        except Exception as e:
-            logger.warning(f"Could not enable Flash Attention: {e}")
-        
-        try:
-            # Enable cuDNN auto-tuning for convolutions
-            torch.backends.cudnn.benchmark = True
-            logger.info("✓ cuDNN benchmark mode enabled")
-        except Exception as e:
-            logger.warning(f"Could not enable cuDNN benchmark: {e}")
-        
-        try:
-            # Allow FP16/BF16 reduction in SDPA for faster attention
-            if hasattr(torch.backends.cuda, 'allow_fp16_bf16_reduction_math_sdp'):
-                torch.backends.cuda.allow_fp16_bf16_reduction_math_sdp(True)
-                logger.info("✓ FP16/BF16 reduction in SDPA enabled")
-        except Exception as e:
-            logger.warning(f"Could not enable FP16/BF16 reduction: {e}")
         
         # Setup ComfyUI paths
         add_comfyui_directory_to_sys_path()
@@ -164,41 +110,12 @@ def load_models_once() -> None:
             _model_cache["lora"] = lora_model
             logger.info("✓ LoRA model loaded")
         
-        # ============================================================================
-        # OPTIMIZATION: Apply torch.compile() to models for faster inference
-        # ============================================================================
-        if ENABLE_TORCH_COMPILE:
-            try:
-                logger.info(f"Applying torch.compile() with mode='{TORCH_COMPILE_MODE}'...")
-                
-                # Check if torch.compile is available (PyTorch 2.0+)
-                if hasattr(torch, 'compile'):
-                    # Note: torch.compile works best on the actual model, not the wrapper
-                    # ComfyUI models are wrapped, so we compile at inference time if needed
-                    logger.info("✓ torch.compile() will be applied at inference time")
-                    _model_cache["torch_compile_enabled"] = True
-                    _model_cache["torch_compile_mode"] = TORCH_COMPILE_MODE
-                else:
-                    logger.warning("torch.compile() not available (requires PyTorch 2.0+)")
-                    _model_cache["torch_compile_enabled"] = False
-            except Exception as e:
-                logger.warning(f"Could not setup torch.compile(): {e}")
-                _model_cache["torch_compile_enabled"] = False
-        else:
-            _model_cache["torch_compile_enabled"] = False
-        
         # Ensure models are on CPU
         _move_models_to_cpu()
         
         _models_loaded = True
         logger.info("=" * 60)
-        logger.info("✓ All models loaded successfully!")
-        logger.info("OPTIMIZATIONS ENABLED:")
-        logger.info("  • Flash Attention / SDPA")
-        logger.info("  • cuDNN benchmark mode")
-        logger.info("  • FP16/BF16 SDPA reduction")
-        if _model_cache.get("torch_compile_enabled"):
-            logger.info(f"  • torch.compile() mode: {TORCH_COMPILE_MODE}")
+        logger.info("✓ All models loaded and available in CPU memory")
         logger.info("=" * 60)
         
     except Exception as e:
@@ -261,91 +178,7 @@ def is_models_loaded() -> bool:
 
 def clear_model_cache() -> None:
     """Clear the model cache (for testing/cleanup)."""
-    global _model_cache, _models_loaded, _warmup_complete
+    global _model_cache, _models_loaded
     _model_cache.clear()
     _models_loaded = False
-    _warmup_complete = False
     logger.info("Model cache cleared")
-
-
-def run_warmup_inference() -> None:
-    """
-    OPTIMIZATION: Run a warmup inference to pre-compile CUDA kernels.
-    
-    This should be called after loading models and before serving requests.
-    The first inference always has overhead from:
-    - CUDA kernel compilation
-    - Memory allocation
-    - torch.compile() tracing (if enabled)
-    
-    Running warmup ensures the first real request doesn't pay this cost.
-    """
-    global _warmup_complete
-    
-    if _warmup_complete:
-        logger.info("Warmup already complete, skipping...")
-        return
-    
-    if not _models_loaded:
-        logger.warning("Models not loaded, cannot run warmup inference")
-        return
-    
-    logger.info("=" * 60)
-    logger.info("Running warmup inference to pre-compile CUDA kernels...")
-    logger.info("=" * 60)
-    
-    try:
-        import time
-        import numpy as np
-        from PIL import Image
-        from pathlib import Path
-        import tempfile
-        
-        warmup_start = time.time()
-        
-        # Create dummy images for warmup
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            
-            # Create a small dummy image (256x256 to speed up warmup)
-            dummy_image = Image.fromarray(
-                np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
-            )
-            
-            masked_image_path = tmpdir_path / "warmup_masked.png"
-            garment_image_path = tmpdir_path / "warmup_garment.png"
-            
-            dummy_image.save(masked_image_path)
-            dummy_image.save(garment_image_path)
-            
-            # Import inference function
-            from app.service.inference import _run_inference_sync
-            
-            # Run a quick warmup inference with minimal steps
-            logger.info("Running warmup with 1 step...")
-            try:
-                _, inference_time = _run_inference_sync(
-                    masked_user_image_path=str(masked_image_path),
-                    garment_image_path=str(garment_image_path),
-                    prompt="warmup",
-                    output_dir=tmpdir,
-                    steps=1,  # Minimal steps for warmup
-                    cfg=1.0,
-                )
-                logger.info(f"✓ Warmup inference complete in {inference_time:.0f}ms")
-            except Exception as e:
-                logger.warning(f"Warmup inference failed (non-fatal): {e}")
-        
-        warmup_total = (time.time() - warmup_start) * 1000
-        logger.info(f"✓ Total warmup time: {warmup_total:.0f}ms")
-        _warmup_complete = True
-        
-    except Exception as e:
-        logger.warning(f"Warmup failed (non-fatal): {e}")
-        import traceback
-        logger.debug(traceback.format_exc())
-
-
-def is_warmup_complete() -> bool:
-    """Check if warmup inference has been completed."""
-    return _warmup_complete

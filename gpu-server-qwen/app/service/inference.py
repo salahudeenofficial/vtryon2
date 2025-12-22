@@ -10,7 +10,7 @@ import random
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional
 import logging
 
 # Add current directory to path
@@ -35,15 +35,6 @@ logger = logging.getLogger(__name__)
 
 # Thread pool executor for running CPU-bound inference operations
 _inference_executor: Optional[ThreadPoolExecutor] = None
-
-# ============================================================================
-# OPTIMIZATION: CUDA Graph caching for static model execution
-# ============================================================================
-# CUDA graphs capture GPU operations and replay them with minimal CPU overhead
-# This is especially effective for batch size 1 and fixed input shapes
-ENABLE_CUDA_GRAPHS = True
-_cuda_graph_cache: Dict = {}
-_cuda_graph_warmup_done = False
 
 
 def _get_inference_executor() -> ThreadPoolExecutor:
@@ -150,28 +141,25 @@ def _run_inference_sync(
                 strength=1, model=get_value_at_index(modelsamplingauraflow_66, 0)
             )
             
-            # OPTIMIZATION: Use cached text encoder to avoid duplicate image processing
-            # This preprocesses images once and reuses for both positive and negative prompts
-            from comfy_extras.nodes_qwen import TextEncodeQwenImageEditPlusCached
-            cached_encoder = TextEncodeQwenImageEditPlusCached()
+            # Use original text encoder (reverted from cached version)
+            textencodeqwenimageeditplus = NODE_CLASS_MAPPINGS["TextEncodeQwenImageEditPlus"]()
             
-            # Preprocess images once
-            cached_encoder.preprocess_images(
+            # Encode positive prompt
+            textencodeqwenimageeditplus_111 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
+                prompt=prompt,
+                clip=get_value_at_index(clip_model, 0),
                 vae=get_value_at_index(vae_model, 0),
                 image1=get_value_at_index(imagescaletototalpixels_93, 0),
                 image2=get_value_at_index(loadimage_106, 0),
             )
             
-            # Encode positive prompt (reuses cached image data)
-            textencodeqwenimageeditplus_111 = cached_encoder.encode(
-                clip=get_value_at_index(clip_model, 0),
-                prompt=prompt,
-            )
-            
-            # Encode negative prompt (reuses same cached image data - no duplicate processing!)
-            textencodeqwenimageeditplus_110 = cached_encoder.encode(
-                clip=get_value_at_index(clip_model, 0),
+            # Encode negative prompt (empty)
+            textencodeqwenimageeditplus_110 = textencodeqwenimageeditplus.EXECUTE_NORMALIZED(
                 prompt="",
+                clip=get_value_at_index(clip_model, 0),
+                vae=get_value_at_index(vae_model, 0),
+                image1=get_value_at_index(imagescaletototalpixels_93, 0),
+                image2=get_value_at_index(loadimage_106, 0),
             )
             
             # Sample
