@@ -10,17 +10,6 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# GPU-ONLY MODE: Keep models in VRAM to avoid CPU<->GPU transfers
-# ============================================================================
-# This must be set BEFORE importing comfy modules
-
-# Force highvram mode via command line args simulation
-# This keeps models in GPU memory instead of offloading to CPU
-if '--highvram' not in sys.argv:
-    sys.argv.append('--highvram')
-    logger.info("✓ GPU-only mode enabled (--highvram)")
-
 # Global model cache
 _model_cache: Dict[str, Any] = {}
 _models_loaded = False
@@ -55,6 +44,31 @@ def load_models_once() -> None:
         )
         import asyncio
         from nodes import init_extra_nodes
+        
+        # ============================================================================
+        # GPU-ONLY MODE: Force highvram mode to keep models in VRAM
+        # ============================================================================
+        try:
+            from comfy.cli_args import args as comfy_args
+            import comfy.model_management as model_management
+            
+            # Set highvram flag directly
+            comfy_args.highvram = True
+            comfy_args.gpu_only = True
+            
+            # Set VRAM state to HIGH_VRAM (models stay in GPU memory)
+            model_management.vram_state = model_management.VRAMState.HIGH_VRAM
+            
+            # Disable smart memory (which can cause model offloading)
+            model_management.DISABLE_SMART_MEMORY = True
+            
+            logger.info("✓ GPU-only mode enabled:")
+            logger.info(f"  • args.highvram = {comfy_args.highvram}")
+            logger.info(f"  • args.gpu_only = {comfy_args.gpu_only}")
+            logger.info(f"  • vram_state = {model_management.vram_state}")
+            logger.info(f"  • DISABLE_SMART_MEMORY = {model_management.DISABLE_SMART_MEMORY}")
+        except Exception as e:
+            logger.warning(f"Could not set GPU-only mode: {e}")
         
         # Setup ComfyUI paths
         add_comfyui_directory_to_sys_path()
