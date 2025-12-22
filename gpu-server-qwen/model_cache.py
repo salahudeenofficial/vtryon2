@@ -1,13 +1,25 @@
 """
 Model caching module for Qwen Image Edit API.
-Loads models once at startup and keeps them in CPU memory.
+Loads models once at startup and keeps them in GPU memory (GPU-only mode).
 """
 import torch
 import logging
 import os
+import sys
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# GPU-ONLY MODE: Keep models in VRAM to avoid CPU<->GPU transfers
+# ============================================================================
+# This must be set BEFORE importing comfy modules
+
+# Force highvram mode via command line args simulation
+# This keeps models in GPU memory instead of offloading to CPU
+if '--highvram' not in sys.argv:
+    sys.argv.append('--highvram')
+    logger.info("✓ GPU-only mode enabled (--highvram)")
 
 # Global model cache
 _model_cache: Dict[str, Any] = {}
@@ -16,7 +28,7 @@ _models_loaded = False
 
 def load_models_once() -> None:
     """
-    Load all models once at startup and keep them in CPU memory.
+    Load all models once at startup and keep them in GPU memory.
     This should be called during FastAPI startup.
     """
     global _model_cache, _models_loaded
@@ -26,7 +38,7 @@ def load_models_once() -> None:
         return
     
     logger.info("=" * 60)
-    logger.info("Loading models into CPU memory...")
+    logger.info("Loading models into GPU memory (GPU-only mode)...")
     logger.info("=" * 60)
     
     try:
@@ -110,12 +122,12 @@ def load_models_once() -> None:
             _model_cache["lora"] = lora_model
             logger.info("✓ LoRA model loaded")
         
-        # Ensure models are on CPU
-        _move_models_to_cpu()
+        # GPU-ONLY MODE: Models stay in GPU memory
+        # (No need to call _move_models_to_cpu)
         
         _models_loaded = True
         logger.info("=" * 60)
-        logger.info("✓ All models loaded and available in CPU memory")
+        logger.info("✓ All models loaded and available in GPU memory (GPU-only mode)")
         logger.info("=" * 60)
         
     except Exception as e:
@@ -123,27 +135,6 @@ def load_models_once() -> None:
         import traceback
         logger.error(traceback.format_exc())
         raise
-
-
-def _move_models_to_cpu() -> None:
-    """
-    Move all cached models to CPU memory.
-    This is called after loading and after each inference.
-    """
-    try:
-        # ComfyUI's model management handles device placement automatically
-        # Models are loaded with CPU offload by default if configured
-        # We just need to ensure they're not actively on GPU
-        import comfy.model_management as model_management
-        
-        # Force models to CPU if they're on GPU
-        # This is handled by ComfyUI's model management system
-        # Models will be moved to GPU automatically when needed during inference
-        pass
-        
-    except Exception as e:
-        logger.warning(f"Could not explicitly move models to CPU: {e}")
-        # This is okay - ComfyUI handles device management
 
 
 def get_cached_model(model_type: str) -> Any:
