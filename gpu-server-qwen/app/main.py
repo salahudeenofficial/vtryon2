@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.service.config import load_config, get_node_id
 from app.service.logger import setup_logging, log_event
 from app.service.auth import require_internal_auth
-from model_cache import load_models_once, is_models_loaded
+from model_cache import load_models_once, is_models_loaded, run_warmup_inference
 
 # Import routers
 from app.routers import tryon, gpu_status, health, version, metrics
@@ -52,6 +52,15 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("Models failed to load")
         
         log_event(logger, "models_loaded", "All models loaded successfully")
+        
+        # OPTIMIZATION: Run warmup inference to pre-compile CUDA kernels
+        logger.info("Running warmup inference...")
+        try:
+            run_warmup_inference()
+            log_event(logger, "warmup_complete", "Warmup inference completed")
+        except Exception as e:
+            logger.warning(f"Warmup inference failed (non-fatal): {e}")
+        
         logger.info("=" * 60)
         logger.info("✓ Server ready to accept requests!")
         logger.info("=" * 60)
