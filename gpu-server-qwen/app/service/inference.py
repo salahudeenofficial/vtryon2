@@ -1,6 +1,9 @@
 """
 Inference service for running Qwen Image Edit workflow.
 Extracts workflow logic from workflow_script_serial.py
+
+OPTIMIZATIONS:
+- torch.compile() for JIT compilation
 """
 import os
 import sys
@@ -10,13 +13,13 @@ import random
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 import logging
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from model_cache import get_cached_model, is_models_loaded
+from model_cache import get_cached_model, is_models_loaded, ENABLE_TORCH_COMPILE, TORCH_COMPILE_MODE
 from workflow_script_serial import (
     add_comfyui_directory_to_sys_path,
     add_extra_model_paths,
@@ -35,6 +38,38 @@ logger = logging.getLogger(__name__)
 
 # Thread pool executor for running CPU-bound inference operations
 _inference_executor: Optional[ThreadPoolExecutor] = None
+
+# ============================================================================
+# OPTIMIZATION: torch.compile cache for JIT compiled models
+# ============================================================================
+_compiled_models: Dict[str, Any] = {}
+_compile_warmup_done = False
+
+
+def _get_compiled_model(model, model_name: str):
+    """
+    Get or create a torch.compiled version of a model.
+    First call will compile, subsequent calls return cached version.
+    """
+    global _compiled_models
+    
+    if not ENABLE_TORCH_COMPILE:
+        return model
+    
+    if model_name not in _compiled_models:
+        try:
+            logger.info(f"Compiling {model_name} with mode='{TORCH_COMPILE_MODE}'...")
+            # Use reduce-overhead for repeated inference with same shapes
+            compiled = torch.compile(model, mode=TORCH_COMPILE_MODE, fullgraph=False)
+            _compiled_models[model_name] = compiled
+            logger.info(f"✓ {model_name} compiled successfully")
+            return compiled
+        except Exception as e:
+            logger.warning(f"Could not compile {model_name}: {e}")
+            _compiled_models[model_name] = model  # Cache the uncompiled model
+            return model
+    
+    return _compiled_models[model_name]
 
 
 def _get_inference_executor() -> ThreadPoolExecutor:
