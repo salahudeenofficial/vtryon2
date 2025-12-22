@@ -94,7 +94,6 @@ def _run_inference_sync(
         
         # Use efficient file copy methods
         import shutil
-        import os
         
         # Remove existing files first to avoid issues
         if masked_input_path.exists():
