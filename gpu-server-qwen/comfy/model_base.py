@@ -147,26 +147,23 @@ class BaseModel(torch.nn.Module):
                 import os
                 if os.environ.get("COMFY_DISABLE_TORCH_COMPILE", "0") != "1":
                     if hasattr(torch, 'compile'):
-                        # Fix recompilation issues by configuring dynamo
+                        # Configure dynamo for better performance
                         import torch._dynamo
                         
-                        # Increase cache size to prevent hitting recompile limit
+                        # Increase cache size to reduce recompilations
                         torch._dynamo.config.cache_size_limit = 64
                         
                         # Suppress errors to avoid breaking on edge cases
                         torch._dynamo.config.suppress_errors = True
                         
-                        # Skip compilation for functions that cause issues
-                        torch._dynamo.config.automatic_dynamic_shapes = True
-                        
-                        logging.info("Applying torch.compile to diffusion model (with dynamo fixes)...")
+                        logging.info("Applying torch.compile to diffusion model...")
                         self.diffusion_model = torch.compile(
                             self.diffusion_model, 
                             mode="reduce-overhead",  # Optimized for repeated inference
-                            fullgraph=False,  # Allow graph breaks for compatibility
-                            dynamic=True  # Handle dynamic shapes without recompilation
+                            fullgraph=False  # Allow graph breaks for compatibility
+                            # NOTE: dynamic=False for better performance (warnings are OK)
                         )
-                        logging.info("✓ torch.compile applied (cache_size_limit=64, dynamic=True)")
+                        logging.info("✓ torch.compile applied (cache_size_limit=64)")
             except Exception as e:
                 logging.warning(f"Could not apply torch.compile: {e}")
             
