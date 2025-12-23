@@ -147,13 +147,26 @@ class BaseModel(torch.nn.Module):
                 import os
                 if os.environ.get("COMFY_DISABLE_TORCH_COMPILE", "0") != "1":
                     if hasattr(torch, 'compile'):
-                        logging.info("Applying torch.compile to diffusion model...")
+                        # Fix recompilation issues by configuring dynamo
+                        import torch._dynamo
+                        
+                        # Increase cache size to prevent hitting recompile limit
+                        torch._dynamo.config.cache_size_limit = 64
+                        
+                        # Suppress errors to avoid breaking on edge cases
+                        torch._dynamo.config.suppress_errors = True
+                        
+                        # Skip compilation for functions that cause issues
+                        torch._dynamo.config.automatic_dynamic_shapes = True
+                        
+                        logging.info("Applying torch.compile to diffusion model (with dynamo fixes)...")
                         self.diffusion_model = torch.compile(
                             self.diffusion_model, 
                             mode="reduce-overhead",  # Optimized for repeated inference
-                            fullgraph=False  # Allow graph breaks for compatibility
+                            fullgraph=False,  # Allow graph breaks for compatibility
+                            dynamic=True  # Handle dynamic shapes without recompilation
                         )
-                        logging.info("✓ torch.compile applied to diffusion model")
+                        logging.info("✓ torch.compile applied (cache_size_limit=64, dynamic=True)")
             except Exception as e:
                 logging.warning(f"Could not apply torch.compile: {e}")
             
