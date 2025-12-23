@@ -139,6 +139,24 @@ class BaseModel(torch.nn.Module):
                 operations = model_config.custom_operations
             self.diffusion_model = unet_model(**unet_config, device=device, operations=operations)
             self.diffusion_model.eval()
+            
+            # ============================================================================
+            # OPTIMIZATION: Apply torch.compile to the diffusion model for JIT compilation
+            # ============================================================================
+            try:
+                import os
+                if os.environ.get("COMFY_DISABLE_TORCH_COMPILE", "0") != "1":
+                    if hasattr(torch, 'compile'):
+                        logging.info("Applying torch.compile to diffusion model...")
+                        self.diffusion_model = torch.compile(
+                            self.diffusion_model, 
+                            mode="reduce-overhead",  # Optimized for repeated inference
+                            fullgraph=False  # Allow graph breaks for compatibility
+                        )
+                        logging.info("✓ torch.compile applied to diffusion model")
+            except Exception as e:
+                logging.warning(f"Could not apply torch.compile: {e}")
+            
             if comfy.model_management.force_channels_last():
                 self.diffusion_model.to(memory_format=torch.channels_last)
                 logging.debug("using channels last mode for diffusion model")
