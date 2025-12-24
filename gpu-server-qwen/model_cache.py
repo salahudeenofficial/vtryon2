@@ -1,8 +1,9 @@
 """
 Model caching module for Qwen Image Edit API.
-Loads models once at startup and keeps them in CPU memory.
+Loads models once at startup and keeps them in GPU memory (GPU-only mode).
 
 OPTIMIZATIONS:
+- GPU-only mode (no CPU offloading) - requires 48GB+ VRAM
 - PyTorch native attention (SDPA) instead of split attention
 - torch.compile() for JIT compilation
 """
@@ -85,8 +86,28 @@ def load_models_once() -> None:
             logger.info(f"  • Flash SDP = {torch.backends.cuda.flash_sdp_enabled()}")
             logger.info(f"  • Math SDP = {torch.backends.cuda.math_sdp_enabled()}")
             logger.info(f"  • Mem Efficient SDP = {torch.backends.cuda.mem_efficient_sdp_enabled()}")
+            
+            # ==================================================================
+            # GPU-ONLY MODE: Keep all models in VRAM (requires 48GB+ GPU)
+            # ==================================================================
+            # Set highvram flag to prevent CPU offloading
+            comfy_args.highvram = True
+            comfy_args.gpu_only = True
+            
+            # Set VRAM state to HIGH_VRAM (models stay in GPU memory)
+            model_management.vram_state = model_management.VRAMState.HIGH_VRAM
+            
+            # Disable smart memory (which triggers offloading)
+            model_management.DISABLE_SMART_MEMORY = True
+            
+            logger.info("✓ GPU-ONLY MODE enabled:")
+            logger.info(f"  • highvram = {comfy_args.highvram}")
+            logger.info(f"  • gpu_only = {comfy_args.gpu_only}")
+            logger.info(f"  • vram_state = {model_management.vram_state}")
+            logger.info(f"  • DISABLE_SMART_MEMORY = {model_management.DISABLE_SMART_MEMORY}")
+            
         except Exception as e:
-            logger.warning(f"Could not set attention optimization: {e}")
+            logger.warning(f"Could not set optimizations: {e}")
         
         # Setup ComfyUI paths
         add_comfyui_directory_to_sys_path()
@@ -158,6 +179,7 @@ def load_models_once() -> None:
         logger.info("=" * 60)
         logger.info("✓ All models loaded successfully!")
         logger.info("OPTIMIZATIONS ACTIVE:")
+        logger.info("  • GPU-ONLY MODE (no CPU offloading)")
         logger.info("  • PyTorch SDPA (native attention)")
         logger.info("  • Split attention DISABLED")
         if ENABLE_TORCH_COMPILE:
