@@ -21,10 +21,9 @@ logger = logging.getLogger(__name__)
 # comfy.cli_args parses sys.argv at import time, so we must set these first
 
 # GPU-only mode: keep all models in VRAM (requires 48GB+ GPU)
+# Note: --highvram and --gpu-only are mutually exclusive, use only --highvram
 if '--highvram' not in sys.argv:
     sys.argv.append('--highvram')
-if '--gpu-only' not in sys.argv:
-    sys.argv.append('--gpu-only')
 if '--disable-smart-memory' not in sys.argv:
     sys.argv.append('--disable-smart-memory')
 
@@ -98,9 +97,8 @@ def load_models_once() -> None:
             # ==================================================================
             # GPU-ONLY MODE: Keep all models in VRAM (requires 48GB+ GPU)
             # ==================================================================
-            # Set highvram flag to prevent CPU offloading
+            # Reinforce highvram flag (already set via sys.argv)
             comfy_args.highvram = True
-            comfy_args.gpu_only = True
             
             # Set VRAM state to HIGH_VRAM (models stay in GPU memory)
             model_management.vram_state = model_management.VRAMState.HIGH_VRAM
@@ -110,7 +108,6 @@ def load_models_once() -> None:
             
             logger.info("✓ GPU-ONLY MODE enabled:")
             logger.info(f"  • highvram = {comfy_args.highvram}")
-            logger.info(f"  • gpu_only = {comfy_args.gpu_only}")
             logger.info(f"  • vram_state = {model_management.vram_state}")
             logger.info(f"  • DISABLE_SMART_MEMORY = {model_management.DISABLE_SMART_MEMORY}")
             
