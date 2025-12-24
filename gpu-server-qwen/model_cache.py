@@ -16,11 +16,19 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# OPTIMIZATION: Force PyTorch native attention (disable split attention)
+# CRITICAL: Set flags BEFORE importing any comfy modules
 # ============================================================================
-# This must be set BEFORE importing comfy modules via sys.argv
-# PyTorch 2.0+ SDPA is faster than split/quad attention
+# comfy.cli_args parses sys.argv at import time, so we must set these first
 
+# GPU-only mode: keep all models in VRAM (requires 48GB+ GPU)
+if '--highvram' not in sys.argv:
+    sys.argv.append('--highvram')
+if '--gpu-only' not in sys.argv:
+    sys.argv.append('--gpu-only')
+if '--disable-smart-memory' not in sys.argv:
+    sys.argv.append('--disable-smart-memory')
+
+# PyTorch native attention (faster than split attention)
 if '--use-pytorch-cross-attention' not in sys.argv:
     sys.argv.append('--use-pytorch-cross-attention')
 
