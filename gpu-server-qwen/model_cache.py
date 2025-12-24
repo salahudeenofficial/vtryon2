@@ -1,9 +1,8 @@
 """
 Model caching module for Qwen Image Edit API.
-Loads models once at startup and keeps them in GPU memory (GPU-only mode).
+Loads models once at startup and caches them.
 
 OPTIMIZATIONS:
-- GPU-only mode (no CPU offloading) - requires 48GB+ VRAM
 - PyTorch native attention (SDPA) instead of split attention
 - torch.compile() for JIT compilation
 """
@@ -14,22 +13,6 @@ import sys
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
-
-# ============================================================================
-# CRITICAL: Set flags BEFORE importing any comfy modules
-# ============================================================================
-# comfy.cli_args parses sys.argv at import time, so we must set these first
-
-# GPU-only mode: keep all models in VRAM (requires 48GB+ GPU)
-# Note: --highvram and --gpu-only are mutually exclusive, use only --highvram
-if '--highvram' not in sys.argv:
-    sys.argv.append('--highvram')
-if '--disable-smart-memory' not in sys.argv:
-    sys.argv.append('--disable-smart-memory')
-
-# PyTorch native attention (faster than split attention)
-if '--use-pytorch-cross-attention' not in sys.argv:
-    sys.argv.append('--use-pytorch-cross-attention')
 
 # Global model cache
 _model_cache: Dict[str, Any] = {}
@@ -94,25 +77,8 @@ def load_models_once() -> None:
             logger.info(f"  • Math SDP = {torch.backends.cuda.math_sdp_enabled()}")
             logger.info(f"  • Mem Efficient SDP = {torch.backends.cuda.mem_efficient_sdp_enabled()}")
             
-            # ==================================================================
-            # GPU-ONLY MODE: Keep all models in VRAM (requires 48GB+ GPU)
-            # ==================================================================
-            # Reinforce highvram flag (already set via sys.argv)
-            comfy_args.highvram = True
-            
-            # Set VRAM state to HIGH_VRAM (models stay in GPU memory)
-            model_management.vram_state = model_management.VRAMState.HIGH_VRAM
-            
-            # Disable smart memory (which triggers offloading)
-            model_management.DISABLE_SMART_MEMORY = True
-            
-            logger.info("✓ GPU-ONLY MODE enabled:")
-            logger.info(f"  • highvram = {comfy_args.highvram}")
-            logger.info(f"  • vram_state = {model_management.vram_state}")
-            logger.info(f"  • DISABLE_SMART_MEMORY = {model_management.DISABLE_SMART_MEMORY}")
-            
         except Exception as e:
-            logger.warning(f"Could not set optimizations: {e}")
+            logger.warning(f"Could not set attention optimization: {e}")
         
         # Setup ComfyUI paths
         add_comfyui_directory_to_sys_path()
@@ -184,7 +150,6 @@ def load_models_once() -> None:
         logger.info("=" * 60)
         logger.info("✓ All models loaded successfully!")
         logger.info("OPTIMIZATIONS ACTIVE:")
-        logger.info("  • GPU-ONLY MODE (no CPU offloading)")
         logger.info("  • PyTorch SDPA (native attention)")
         logger.info("  • Split attention DISABLED")
         if ENABLE_TORCH_COMPILE:
