@@ -642,10 +642,22 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
 
     for x in models:
         loaded_model = LoadedModel(x)
+        
+        # First try exact match (same ModelPatcher instance)
         try:
             loaded_model_index = current_loaded_models.index(loaded_model)
         except:
             loaded_model_index = None
+        
+        # OPTIMIZATION: If not exact match, check if underlying model is already loaded
+        # This handles the case where new ModelPatcher wrappers are created for the same model
+        if loaded_model_index is None:
+            for i, cached in enumerate(current_loaded_models):
+                if cached.model is not None and loaded_model.model is not None:
+                    # Check if underlying nn.Module is the same (is_clone check)
+                    if cached.model.is_clone(loaded_model.model):
+                        loaded_model_index = i
+                        break
 
         if loaded_model_index is not None:
             loaded = current_loaded_models[loaded_model_index]
