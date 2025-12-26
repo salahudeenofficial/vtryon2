@@ -145,11 +145,55 @@ def load_models_once() -> None:
             )
             _model_cache["lora"] = lora_model
             logger.info("✓ LoRA model loaded")
+            
+            # ================================================================
+            # PRELOAD: Move all models to GPU immediately
+            # ================================================================
+            # This ensures models are in current_loaded_models so subsequent
+            # inferences don't need to reload them
+            logger.info("Preloading models to GPU...")
+            try:
+                import comfy.model_management as mm
+                
+                # Get the actual model patchers from the cached tuples
+                models_to_preload = []
+                
+                # LoRA model (this is UNET with LoRA applied)
+                lora_patcher = get_value_at_index(lora_model, 0)
+                if hasattr(lora_patcher, 'model'):
+                    models_to_preload.append(lora_patcher)
+                
+                # CLIP model
+                clip_patcher = get_value_at_index(clip_model, 0)
+                if hasattr(clip_patcher, 'patcher'):
+                    models_to_preload.append(clip_patcher.patcher)
+                elif hasattr(clip_patcher, 'model'):
+                    models_to_preload.append(clip_patcher)
+                
+                # VAE model  
+                vae_patcher = get_value_at_index(vae_model, 0)
+                if hasattr(vae_patcher, 'patcher'):
+                    models_to_preload.append(vae_patcher.patcher)
+                elif hasattr(vae_patcher, 'first_stage_model'):
+                    # VAE is not a patcher, skip for now
+                    pass
+                
+                # Load all models to GPU
+                if models_to_preload:
+                    logger.info(f"  Loading {len(models_to_preload)} model(s) to GPU...")
+                    mm.load_models_gpu(models_to_preload, force_full_load=True)
+                    logger.info("✓ Models preloaded to GPU")
+                    
+            except Exception as e:
+                logger.warning(f"Could not preload models to GPU: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
         
         _models_loaded = True
         logger.info("=" * 60)
         logger.info("✓ All models loaded successfully!")
         logger.info("OPTIMIZATIONS ACTIVE:")
+        logger.info("  • HIGH_VRAM mode (models stay in GPU)")
         logger.info("  • PyTorch SDPA (native attention)")
         logger.info("  • Split attention DISABLED")
         if ENABLE_TORCH_COMPILE:
