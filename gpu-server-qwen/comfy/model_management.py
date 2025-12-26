@@ -618,6 +618,11 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
     cleanup_models_gc()
     global vram_state
 
+    # OPTIMIZATION: When in HIGH_VRAM mode, always force full load
+    # This prevents unnecessary memory calculations and ensures models stay in GPU
+    if vram_state == VRAMState.HIGH_VRAM:
+        force_full_load = True
+
     inference_memory = minimum_inference_memory()
     extra_mem = max(inference_memory, memory_required + extra_reserved_memory())
     if minimum_memory_required is None:
