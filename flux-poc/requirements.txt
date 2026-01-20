@@ -5,9 +5,9 @@ fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
 
-# ML/AI
+# ML/AI - Install diffusers from git for latest FLUX.2 support
 torch>=2.1.0
-diffusers>=0.31.0
+# diffusers>=0.32.0  # Use git install instead for latest
 transformers>=4.40.0
 accelerate>=0.27.0
 safetensors>=0.4.0

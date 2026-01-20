@@ -20,8 +20,13 @@ fi
 
 # Install dependencies
 echo ""
-echo "Installing dependencies..."
+echo "Installing base dependencies..."
 pip install -q -r requirements.txt
+
+# Install latest diffusers from git for FLUX.2 support
+echo ""
+echo "Installing latest diffusers from git (for FLUX.2 support)..."
+pip install -q git+https://github.com/huggingface/diffusers.git
 
 # Check HuggingFace login
 echo ""

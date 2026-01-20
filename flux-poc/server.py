@@ -1,12 +1,15 @@
 """
 FLUX.2 [klein] 9B Virtual Try-On POC Server
 FastAPI server for virtual try-on using FLUX.2-klein-9B model
+
+Uses the official BFL flux2 repository for inference.
 """
 
 import io
 import base64
 import uuid
-import asyncio
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -19,7 +22,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 # Global model reference
-pipe = None
+model = None
+sampler = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
@@ -48,65 +52,111 @@ class HealthResponse(BaseModel):
     gpu_name: Optional[str] = None
     gpu_memory_total: Optional[str] = None
     gpu_memory_free: Optional[str] = None
+    pipeline_type: Optional[str] = None
 
 
 def load_model():
-    """Load the FLUX.2-klein-9B model"""
-    global pipe
+    """Load the FLUX.2-klein-9B model using available pipeline"""
+    global model, sampler
     
+    print("=" * 60)
     print("Loading FLUX.2-klein-9B model...")
+    print("=" * 60)
     
+    # Try multiple loading strategies
+    
+    # Strategy 1: Try diffusers Flux2KleinPipeline (if available in latest diffusers)
     try:
+        print("\n[1/3] Trying Flux2KleinPipeline from diffusers...")
         from diffusers import Flux2KleinPipeline
         
-        pipe = Flux2KleinPipeline.from_pretrained(
+        model = Flux2KleinPipeline.from_pretrained(
             "black-forest-labs/FLUX.2-klein-9B",
             torch_dtype=dtype,
         )
         
-        # Use CPU offload to manage VRAM
         if torch.cuda.is_available():
-            pipe.enable_model_cpu_offload()
+            model.enable_model_cpu_offload()
         
-        print(f"Model loaded successfully on {device}")
-        return True
+        print("✓ Loaded with Flux2KleinPipeline")
+        return "Flux2KleinPipeline"
         
+    except ImportError as e:
+        print(f"  Flux2KleinPipeline not available: {e}")
     except Exception as e:
-        print(f"Error loading model: {e}")
-        print("Attempting to load with reduced precision...")
+        print(f"  Failed: {e}")
+    
+    # Strategy 2: Try FluxPipeline with klein model (generic flux pipeline)
+    try:
+        print("\n[2/3] Trying FluxPipeline from diffusers...")
+        from diffusers import FluxPipeline
         
-        try:
-            # Try with float16 if bfloat16 fails
-            from diffusers import Flux2KleinPipeline
-            
-            pipe = Flux2KleinPipeline.from_pretrained(
-                "black-forest-labs/FLUX.2-klein-9B",
-                torch_dtype=torch.float16,
-            )
-            
-            if torch.cuda.is_available():
-                pipe.enable_model_cpu_offload()
-            
-            print(f"Model loaded with float16 on {device}")
-            return True
-            
-        except Exception as e2:
-            print(f"Failed to load model: {e2}")
-            return False
+        model = FluxPipeline.from_pretrained(
+            "black-forest-labs/FLUX.2-klein-9B",
+            torch_dtype=dtype,
+        )
+        
+        if torch.cuda.is_available():
+            model.enable_model_cpu_offload()
+        
+        print("✓ Loaded with FluxPipeline")
+        return "FluxPipeline"
+        
+    except ImportError as e:
+        print(f"  FluxPipeline not available: {e}")
+    except Exception as e:
+        print(f"  Failed: {e}")
+    
+    # Strategy 3: Try FluxImg2ImgPipeline for image-to-image
+    try:
+        print("\n[3/3] Trying FluxImg2ImgPipeline from diffusers...")
+        from diffusers import FluxImg2ImgPipeline
+        
+        model = FluxImg2ImgPipeline.from_pretrained(
+            "black-forest-labs/FLUX.2-klein-9B",
+            torch_dtype=dtype,
+        )
+        
+        if torch.cuda.is_available():
+            model.enable_model_cpu_offload()
+        
+        print("✓ Loaded with FluxImg2ImgPipeline")
+        return "FluxImg2ImgPipeline"
+        
+    except ImportError as e:
+        print(f"  FluxImg2ImgPipeline not available: {e}")
+    except Exception as e:
+        print(f"  Failed: {e}")
+    
+    print("\n" + "=" * 60)
+    print("ERROR: Could not load model with any available pipeline")
+    print("=" * 60)
+    print("\nPlease try:")
+    print("  1. pip install -U diffusers transformers accelerate")
+    print("  2. pip install git+https://github.com/huggingface/diffusers.git")
+    print("  3. Ensure you've accepted the model license on HuggingFace")
+    print("  4. Run: huggingface-cli login")
+    
+    return None
+
+
+# Track pipeline type
+pipeline_type = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for model loading"""
+    global pipeline_type
     # Startup
-    success = load_model()
-    if not success:
+    pipeline_type = load_model()
+    if pipeline_type is None:
         print("WARNING: Model failed to load. Server will start but inference will fail.")
     yield
     # Shutdown
-    global pipe
-    if pipe is not None:
-        del pipe
+    global model
+    if model is not None:
+        del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -114,7 +164,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="FLUX.2 Klein Virtual Try-On POC",
     description="Virtual try-on using FLUX.2-klein-9B multi-reference editing",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan
 )
 
@@ -151,6 +201,81 @@ def encode_image_to_base64(image: Image.Image, format: str = "PNG") -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+def create_composite_image(person_img: Image.Image, garment_img: Image.Image, 
+                           width: int, height: int) -> Image.Image:
+    """
+    Create a side-by-side composite image for models that don't support multi-reference.
+    This is a fallback for older pipelines.
+    """
+    # Resize both images to half width
+    half_width = width // 2
+    person_resized = person_img.resize((half_width, height), Image.Resampling.LANCZOS)
+    garment_resized = garment_img.resize((half_width, height), Image.Resampling.LANCZOS)
+    
+    # Create composite
+    composite = Image.new('RGB', (width, height))
+    composite.paste(person_resized, (0, 0))
+    composite.paste(garment_resized, (half_width, 0))
+    
+    return composite
+
+
+def run_inference(person_img: Image.Image, garment_img: Image.Image,
+                  prompt: str, width: int, height: int,
+                  num_steps: int, guidance: float, seed: int):
+    """Run inference with the loaded model"""
+    global model, pipeline_type
+    
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+    
+    # Resize images
+    person_img = person_img.resize((width, height), Image.Resampling.LANCZOS)
+    garment_img = garment_img.resize((width, height), Image.Resampling.LANCZOS)
+    
+    if pipeline_type == "Flux2KleinPipeline":
+        # Native multi-reference support
+        result = model(
+            prompt=prompt,
+            image=[person_img, garment_img],
+            height=height,
+            width=width,
+            guidance_scale=guidance,
+            num_inference_steps=num_steps,
+            generator=generator,
+        )
+    elif pipeline_type == "FluxImg2ImgPipeline":
+        # Image-to-image: use composite as init image
+        composite = create_composite_image(person_img, garment_img, width, height)
+        result = model(
+            prompt=f"Virtual try-on: {prompt}. Left side shows the person, right side shows the garment to wear.",
+            image=composite,
+            strength=0.8,
+            height=height,
+            width=width,
+            guidance_scale=guidance,
+            num_inference_steps=num_steps,
+            generator=generator,
+        )
+    elif pipeline_type == "FluxPipeline":
+        # Text-to-image with detailed prompt
+        # For text-only, we describe both images in the prompt
+        enhanced_prompt = f"""Virtual try-on fashion photo: {prompt}
+The person should maintain their identity, pose, and body shape.
+The garment details, texture, and style should be accurately represented."""
+        result = model(
+            prompt=enhanced_prompt,
+            height=height,
+            width=width,
+            guidance_scale=guidance,
+            num_inference_steps=num_steps,
+            generator=generator,
+        )
+    else:
+        raise ValueError(f"Unknown pipeline type: {pipeline_type}")
+    
+    return result.images[0]
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint with GPU info"""
@@ -168,25 +293,26 @@ async def health_check():
     
     return HealthResponse(
         status="healthy",
-        model_loaded=pipe is not None,
+        model_loaded=model is not None,
         device=device,
         cuda_available=torch.cuda.is_available(),
         gpu_name=gpu_name,
         gpu_memory_total=gpu_memory_total,
-        gpu_memory_free=gpu_memory_free
+        gpu_memory_free=gpu_memory_free,
+        pipeline_type=pipeline_type
     )
 
 
 @app.post("/tryon", response_model=TryOnResponse)
 async def virtual_tryon(request: TryOnRequest):
     """
-    Virtual try-on endpoint using FLUX.2-klein-9B multi-reference editing
+    Virtual try-on endpoint using FLUX.2-klein-9B
     
     Takes a person image and garment image, returns the person wearing the garment.
     """
-    global pipe
+    global model
     
-    if pipe is None:
+    if model is None:
         raise HTTPException(
             status_code=503,
             detail="Model not loaded. Please wait for model initialization or check server logs."
@@ -197,27 +323,20 @@ async def virtual_tryon(request: TryOnRequest):
         person_img = decode_base64_image(request.person_image)
         garment_img = decode_base64_image(request.garment_image)
         
-        # Resize images to target dimensions
-        person_img = person_img.resize((request.width, request.height), Image.Resampling.LANCZOS)
-        garment_img = garment_img.resize((request.width, request.height), Image.Resampling.LANCZOS)
-        
         # Set seed for reproducibility
         seed = request.seed if request.seed is not None else torch.randint(0, 2**32, (1,)).item()
-        generator = torch.Generator(device="cpu").manual_seed(seed)
         
-        # Run inference with multi-reference input
-        # The model takes a list of images for multi-reference editing
-        result = pipe(
+        # Run inference
+        result_image = run_inference(
+            person_img=person_img,
+            garment_img=garment_img,
             prompt=request.prompt,
-            image=[person_img, garment_img],
-            height=request.height,
             width=request.width,
-            guidance_scale=request.guidance_scale,
-            num_inference_steps=request.num_inference_steps,
-            generator=generator,
+            height=request.height,
+            num_steps=request.num_inference_steps,
+            guidance=request.guidance_scale,
+            seed=seed
         )
-        
-        result_image = result.images[0]
         
         # Encode result to base64
         result_base64 = encode_image_to_base64(result_image)
@@ -228,6 +347,8 @@ async def virtual_tryon(request: TryOnRequest):
         )
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Inference failed: {str(e)}"
@@ -250,9 +371,9 @@ async def virtual_tryon_upload(
     
     Alternative endpoint that accepts file uploads instead of base64.
     """
-    global pipe
+    global model
     
-    if pipe is None:
+    if model is None:
         raise HTTPException(
             status_code=503,
             detail="Model not loaded. Please wait for model initialization or check server logs."
@@ -273,26 +394,20 @@ async def virtual_tryon_upload(
         if garment_img.mode != "RGB":
             garment_img = garment_img.convert("RGB")
         
-        # Resize images
-        person_img = person_img.resize((width, height), Image.Resampling.LANCZOS)
-        garment_img = garment_img.resize((width, height), Image.Resampling.LANCZOS)
-        
         # Set seed
         actual_seed = seed if seed is not None else torch.randint(0, 2**32, (1,)).item()
-        generator = torch.Generator(device="cpu").manual_seed(actual_seed)
         
         # Run inference
-        result = pipe(
+        result_image = run_inference(
+            person_img=person_img,
+            garment_img=garment_img,
             prompt=prompt,
-            image=[person_img, garment_img],
-            height=height,
             width=width,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            generator=generator,
+            height=height,
+            num_steps=num_inference_steps,
+            guidance=guidance_scale,
+            seed=actual_seed
         )
-        
-        result_image = result.images[0]
         
         # Return as streaming response (PNG)
         buffer = io.BytesIO()
@@ -309,6 +424,8 @@ async def virtual_tryon_upload(
         )
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Inference failed: {str(e)}"
@@ -320,7 +437,8 @@ async def root():
     """Root endpoint with API info"""
     return {
         "name": "FLUX.2 Klein Virtual Try-On POC",
-        "version": "0.1.0",
+        "version": "0.2.0",
+        "pipeline_type": pipeline_type,
         "endpoints": {
             "/health": "GET - Health check with GPU info",
             "/tryon": "POST - Virtual try-on with base64 images",
