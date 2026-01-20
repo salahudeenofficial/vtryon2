@@ -10,6 +10,7 @@ import base64
 import uuid
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -42,6 +43,8 @@ class TryOnRequest(BaseModel):
 class TryOnResponse(BaseModel):
     result_image: str  # Base64 encoded
     seed_used: int
+    inference_time_ms: Optional[float] = None
+    peak_gpu_memory_gb: Optional[float] = None
 
 
 class HealthResponse(BaseModel):
@@ -62,6 +65,9 @@ def load_model():
     print("=" * 60)
     print("Loading FLUX.2-klein-9B model...")
     print("=" * 60)
+    print("NOTE: CPU offload is DISABLED - model will run fully on GPU")
+    print("      This provides maximum performance but requires ~29GB VRAM")
+    print("=" * 60)
     
     # Try multiple loading strategies
     
@@ -75,8 +81,10 @@ def load_model():
             torch_dtype=dtype,
         )
         
+        # Move to GPU (NO CPU offload for full performance)
         if torch.cuda.is_available():
-            model.enable_model_cpu_offload()
+            model = model.to("cuda")
+            print(f"  Model moved to GPU: {torch.cuda.get_device_name(0)}")
         
         print("✓ Loaded with Flux2KleinPipeline")
         return "Flux2KleinPipeline"
@@ -96,8 +104,10 @@ def load_model():
             torch_dtype=dtype,
         )
         
+        # Move to GPU (NO CPU offload for full performance)
         if torch.cuda.is_available():
-            model.enable_model_cpu_offload()
+            model = model.to("cuda")
+            print(f"  Model moved to GPU: {torch.cuda.get_device_name(0)}")
         
         print("✓ Loaded with FluxPipeline")
         return "FluxPipeline"
@@ -117,8 +127,10 @@ def load_model():
             torch_dtype=dtype,
         )
         
+        # Move to GPU (NO CPU offload for full performance)
         if torch.cuda.is_available():
-            model.enable_model_cpu_offload()
+            model = model.to("cuda")
+            print(f"  Model moved to GPU: {torch.cuda.get_device_name(0)}")
         
         print("✓ Loaded with FluxImg2ImgPipeline")
         return "FluxImg2ImgPipeline"
@@ -128,16 +140,17 @@ def load_model():
     except Exception as e:
         print(f"  Failed: {e}")
     
-    print("\n" + "=" * 60)
-    print("ERROR: Could not load model with any available pipeline")
-    print("=" * 60)
-    print("\nPlease try:")
-    print("  1. pip install -U diffusers transformers accelerate")
-    print("  2. pip install git+https://github.com/huggingface/diffusers.git")
-    print("  3. Ensure you've accepted the model license on HuggingFace")
-    print("  4. Run: huggingface-cli login")
-    
-    return None
+        print("\n" + "=" * 60)
+        print("ERROR: Could not load model with any available pipeline")
+        print("=" * 60)
+        print("\nPlease try:")
+        print("  1. pip install -U diffusers transformers accelerate")
+        print("  2. pip install git+https://github.com/huggingface/diffusers.git")
+        print("  3. Ensure you've accepted the model license on HuggingFace")
+        print("  4. Run: huggingface-cli login")
+        print("  5. Set HF_TOKEN environment variable if needed")
+        
+        return None
 
 
 # Track pipeline type
@@ -223,57 +236,76 @@ def create_composite_image(person_img: Image.Image, garment_img: Image.Image,
 def run_inference(person_img: Image.Image, garment_img: Image.Image,
                   prompt: str, width: int, height: int,
                   num_steps: int, guidance: float, seed: int):
-    """Run inference with the loaded model"""
+    """Run inference with the loaded model and track performance metrics"""
     global model, pipeline_type
     
-    generator = torch.Generator(device="cpu").manual_seed(seed)
+    generator = torch.Generator(device="cuda" if torch.cuda.is_available() else "cpu").manual_seed(seed)
     
     # Resize images
     person_img = person_img.resize((width, height), Image.Resampling.LANCZOS)
     garment_img = garment_img.resize((width, height), Image.Resampling.LANCZOS)
     
-    if pipeline_type == "Flux2KleinPipeline":
-        # Native multi-reference support
-        result = model(
-            prompt=prompt,
-            image=[person_img, garment_img],
-            height=height,
-            width=width,
-            guidance_scale=guidance,
-            num_inference_steps=num_steps,
-            generator=generator,
-        )
-    elif pipeline_type == "FluxImg2ImgPipeline":
-        # Image-to-image: use composite as init image
-        composite = create_composite_image(person_img, garment_img, width, height)
-        result = model(
-            prompt=f"Virtual try-on: {prompt}. Left side shows the person, right side shows the garment to wear.",
-            image=composite,
-            strength=0.8,
-            height=height,
-            width=width,
-            guidance_scale=guidance,
-            num_inference_steps=num_steps,
-            generator=generator,
-        )
-    elif pipeline_type == "FluxPipeline":
-        # Text-to-image with detailed prompt
-        # For text-only, we describe both images in the prompt
-        enhanced_prompt = f"""Virtual try-on fashion photo: {prompt}
+    # Clear GPU cache and reset peak memory tracking
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.empty_cache()
+        memory_before = torch.cuda.memory_allocated() / 1024**3  # GB
+    
+    # Start timing
+    start_time = time.time()
+    
+    try:
+        if pipeline_type == "Flux2KleinPipeline":
+            # Native multi-reference support
+            result = model(
+                prompt=prompt,
+                image=[person_img, garment_img],
+                height=height,
+                width=width,
+                guidance_scale=guidance,
+                num_inference_steps=num_steps,
+                generator=generator,
+            )
+        elif pipeline_type == "FluxImg2ImgPipeline":
+            # Image-to-image: use composite as init image
+            composite = create_composite_image(person_img, garment_img, width, height)
+            result = model(
+                prompt=f"Virtual try-on: {prompt}. Left side shows the person, right side shows the garment to wear.",
+                image=composite,
+                strength=0.8,
+                height=height,
+                width=width,
+                guidance_scale=guidance,
+                num_inference_steps=num_steps,
+                generator=generator,
+            )
+        elif pipeline_type == "FluxPipeline":
+            # Text-to-image with detailed prompt
+            # For text-only, we describe both images in the prompt
+            enhanced_prompt = f"""Virtual try-on fashion photo: {prompt}
 The person should maintain their identity, pose, and body shape.
 The garment details, texture, and style should be accurately represented."""
-        result = model(
-            prompt=enhanced_prompt,
-            height=height,
-            width=width,
-            guidance_scale=guidance,
-            num_inference_steps=num_steps,
-            generator=generator,
-        )
-    else:
-        raise ValueError(f"Unknown pipeline type: {pipeline_type}")
+            result = model(
+                prompt=enhanced_prompt,
+                height=height,
+                width=width,
+                guidance_scale=guidance,
+                num_inference_steps=num_steps,
+                generator=generator,
+            )
+        else:
+            raise ValueError(f"Unknown pipeline type: {pipeline_type}")
+    finally:
+        # End timing
+        inference_time_ms = (time.time() - start_time) * 1000
+        
+        # Get peak GPU memory
+        peak_gpu_memory_gb = None
+        if torch.cuda.is_available():
+            peak_memory = torch.cuda.max_memory_allocated() / 1024**3  # GB
+            peak_gpu_memory_gb = peak_memory
     
-    return result.images[0]
+    return result.images[0], inference_time_ms, peak_gpu_memory_gb
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -288,8 +320,10 @@ async def health_check():
         props = torch.cuda.get_device_properties(0)
         gpu_memory_total = f"{props.total_memory / 1024**3:.2f} GB"
         
-        free_memory = torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)
-        gpu_memory_free = f"{free_memory / 1024**3:.2f} GB"
+        allocated = torch.cuda.memory_allocated(0) / 1024**3
+        reserved = torch.cuda.memory_reserved(0) / 1024**3
+        free_memory = (props.total_memory / 1024**3) - reserved
+        gpu_memory_free = f"{free_memory:.2f} GB"
     
     return HealthResponse(
         status="healthy",
@@ -326,8 +360,8 @@ async def virtual_tryon(request: TryOnRequest):
         # Set seed for reproducibility
         seed = request.seed if request.seed is not None else torch.randint(0, 2**32, (1,)).item()
         
-        # Run inference
-        result_image = run_inference(
+        # Run inference (returns image, time, peak memory)
+        result_image, inference_time_ms, peak_gpu_memory_gb = run_inference(
             person_img=person_img,
             garment_img=garment_img,
             prompt=request.prompt,
@@ -341,9 +375,20 @@ async def virtual_tryon(request: TryOnRequest):
         # Encode result to base64
         result_base64 = encode_image_to_base64(result_image)
         
+        # Log performance metrics
+        print(f"\n{'='*60}")
+        print(f"Inference completed:")
+        print(f"  Time: {inference_time_ms:.2f} ms ({inference_time_ms/1000:.3f} seconds)")
+        print(f"  Peak GPU Memory: {peak_gpu_memory_gb:.2f} GB")
+        print(f"  Steps: {request.num_inference_steps}")
+        print(f"  Seed: {seed}")
+        print(f"{'='*60}\n")
+        
         return TryOnResponse(
             result_image=f"data:image/png;base64,{result_base64}",
-            seed_used=seed
+            seed_used=seed,
+            inference_time_ms=inference_time_ms,
+            peak_gpu_memory_gb=peak_gpu_memory_gb
         )
         
     except Exception as e:
@@ -397,8 +442,8 @@ async def virtual_tryon_upload(
         # Set seed
         actual_seed = seed if seed is not None else torch.randint(0, 2**32, (1,)).item()
         
-        # Run inference
-        result_image = run_inference(
+        # Run inference (returns image, time, peak memory)
+        result_image, inference_time_ms, peak_gpu_memory_gb = run_inference(
             person_img=person_img,
             garment_img=garment_img,
             prompt=prompt,
@@ -408,6 +453,15 @@ async def virtual_tryon_upload(
             guidance=guidance_scale,
             seed=actual_seed
         )
+        
+        # Log performance metrics
+        print(f"\n{'='*60}")
+        print(f"Inference completed:")
+        print(f"  Time: {inference_time_ms:.2f} ms ({inference_time_ms/1000:.3f} seconds)")
+        print(f"  Peak GPU Memory: {peak_gpu_memory_gb:.2f} GB")
+        print(f"  Steps: {num_inference_steps}")
+        print(f"  Seed: {actual_seed}")
+        print(f"{'='*60}\n")
         
         # Return as streaming response (PNG)
         buffer = io.BytesIO()
@@ -419,6 +473,8 @@ async def virtual_tryon_upload(
             media_type="image/png",
             headers={
                 "X-Seed-Used": str(actual_seed),
+                "X-Inference-Time-Ms": str(inference_time_ms),
+                "X-Peak-GPU-Memory-GB": str(peak_gpu_memory_gb),
                 "Content-Disposition": f"attachment; filename=tryon_result_{actual_seed}.png"
             }
         )
