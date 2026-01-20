@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FLUX.2 Klein Virtual Try-On</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --accent-primary: #ff3366;
+            --accent-secondary: #00ffaa;
+            --accent-tertiary: #6366f1;
+            --text-primary: #f0f0f5;
+            --text-secondary: #8888a0;
+            --text-muted: #555566;
+            --border-color: #2a2a3a;
+            --success: #00ffaa;
+            --error: #ff4466;
+            --warning: #ffaa00;
+            --gradient-1: linear-gradient(135deg, #ff3366 0%, #6366f1 50%, #00ffaa 100%);
+            --gradient-2: linear-gradient(135deg, #1a1a24 0%, #0a0a0f 100%);
+            --shadow-glow: 0 0 40px rgba(255, 51, 102, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(255, 51, 102, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(0, 255, 170, 0.03) 0%, transparent 70%);
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 800;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* Server Config */
+        .server-config {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .server-config label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .input-group input {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-primary {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #ff4477;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(255, 51, 102, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background: var(--bg-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected .status-dot {
+            background: var(--success);
+        }
+
+        .status-disconnected .status-dot {
+            background: var(--error);
+            animation: none;
+        }
+
+        .status-checking .status-dot {
+            background: var(--warning);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Upload Cards */
+        .upload-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .upload-card:hover {
+            border-color: var(--accent-tertiary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title .icon {
+            font-size: 1.3rem;
+        }
+
+        .card-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .upload-zone {
+            position: relative;
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-primary);
+            background: rgba(255, 51, 102, 0.02);
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--accent-secondary);
+            background: rgba(0, 255, 170, 0.05);
+        }
+
+        .upload-zone.has-image {
+            padding: 0;
+            border-style: solid;
+        }
+
+        .upload-zone input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .upload-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .upload-text strong {
+            color: var(--accent-primary);
+        }
+
+        .preview-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+
+        .image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-zone:hover .image-overlay {
+            opacity: 1;
+        }
+
+        .image-info {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .btn-remove {
+            background: var(--error);
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+        }
+
+        /* Result Card */
+        .result-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 1.5rem;
+        }
+
+        .result-zone {
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-secondary);
+        }
+
+        .result-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .result-placeholder .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .result-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 10px;
+        }
+
+        /* Controls Panel */
+        .controls-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+
+        .controls-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .controls-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .control-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: var(--accent-tertiary);
+        }
+
+        textarea.control-input {
+            min-height: 80px;
+            resize: vertical;
+            font-family: 'Syne', sans-serif;
+        }
+
+        .prompt-group {
+            grid-column: 1 / -1;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-generate {
+            background: var(--gradient-1);
+            color: white;
+            padding: 1rem 3rem;
+            font-size: 1rem;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-generate::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-generate:hover::before {
+            left: 100%;
+        }
+
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(255, 51, 102, 0.4);
+        }
+
+        .btn-generate:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-download {
+            background: var(--accent-secondary);
+            color: var(--bg-primary);
+        }
+
+        .btn-download:hover {
+            box-shadow: 0 4px 20px rgba(0, 255, 170, 0.3);
+        }
+
+        /* Loading State */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* GPU Info */
+        .gpu-info {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .gpu-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .gpu-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .gpu-info-label {
+            color: var(--text-secondary);
+        }
+
+        .gpu-info-value {
+            color: var(--accent-secondary);
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: slideIn 0.3s ease;
+            max-width: 400px;
+        }
+
+        .toast.success {
+            border-color: var(--success);
+        }
+
+        .toast.error {
+            border-color: var(--error);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 2rem;
+        }
+
+        footer a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    
+    <div class="container">
+        <header>
+            <h1 class="logo">FLUX.2 KLEIN</h1>
+            <p class="subtitle">Virtual Try-On POC</p>
+        </header>
+
+        <!-- Server Configuration -->
+        <div class="server-config">
+            <label>Server</label>
+            <div class="input-group">
+                <input type="text" id="serverUrl" placeholder="http://localhost:8000" value="http://localhost:8000">
+                <button class="btn btn-secondary" onclick="checkConnection()">Test Connection</button>
+            </div>
+            <div class="status-indicator status-disconnected" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+        </div>
+
+        <!-- GPU Info (shown when connected) -->
+        <div class="gpu-info" id="gpuInfo" style="display: none;">
+            <div class="gpu-info-row">
+                <span class="gpu-info-label">GPU</span>
+                <span class="gpu-info-value" id="gpuName">-</span>
+            </div>
+            <div class="gpu-info-row">
+                <span class="gpu-info-label">VRAM Total</span>
+                <span class="gpu-info-value" id="gpuMemTotal">-</span>
+            </div>
+            <div class="gpu-info-row">
+                <span class="gpu-info-label">Model Loaded</span>
+                <span class="gpu-info-value" id="modelLoaded">-</span>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Person Image Upload -->
+            <div class="upload-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <span class="icon">👤</span>
+                        Person Image
+                    </h3>
+                    <span class="card-badge">Reference 1</span>
+                </div>
+                <div class="upload-zone" id="personZone" onclick="document.getElementById('personInput').click()">
+                    <input type="file" id="personInput" accept="image/*" onchange="handleImageUpload(this, 'person')">
+                    <div class="upload-content" id="personContent">
+                        <div class="upload-icon">📷</div>
+                        <p class="upload-text">
+                            <strong>Click to upload</strong> or drag and drop<br>
+                            PNG, JPG up to 10MB
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Garment Image Upload -->
+            <div class="upload-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <span class="icon">👕</span>
+                        Garment Image
+                    </h3>
+                    <span class="card-badge">Reference 2</span>
+                </div>
+                <div class="upload-zone" id="garmentZone" onclick="document.getElementById('garmentInput').click()">
+                    <input type="file" id="garmentInput" accept="image/*" onchange="handleImageUpload(this, 'garment')">
+                    <div class="upload-content" id="garmentContent">
+                        <div class="upload-icon">👔</div>
+                        <p class="upload-text">
+                            <strong>Click to upload</strong> or drag and drop<br>
+                            PNG, JPG up to 10MB
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result -->
+            <div class="result-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <span class="icon">✨</span>
+                        Result
+                    </h3>
+                    <span class="card-badge" id="seedBadge">-</span>
+                </div>
+                <div class="result-zone" id="resultZone">
+                    <div class="result-placeholder" id="resultPlaceholder">
+                        <div class="icon">🎨</div>
+                        <p>Generated image will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <div class="controls-header">
+                <h3 class="controls-title">Generation Settings</h3>
+            </div>
+            
+            <div class="controls-grid">
+                <div class="control-group prompt-group">
+                    <label class="control-label">Prompt</label>
+                    <textarea class="control-input" id="prompt">A photo of the person wearing the garment, maintaining identity and garment texture, high quality fashion photography</textarea>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Inference Steps</label>
+                    <input type="number" class="control-input" id="steps" value="4" min="1" max="50">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Guidance Scale</label>
+                    <input type="number" class="control-input" id="guidance" value="1.0" min="0" max="20" step="0.1">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Width</label>
+                    <input type="number" class="control-input" id="width" value="1024" min="256" max="2048" step="64">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Height</label>
+                    <input type="number" class="control-input" id="height" value="1024" min="256" max="2048" step="64">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Seed (optional)</label>
+                    <input type="number" class="control-input" id="seed" placeholder="Random">
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-generate" id="generateBtn" onclick="generateTryOn()">
+                    ✨ Generate Try-On
+                </button>
+                <button class="btn btn-secondary btn-download" id="downloadBtn" onclick="downloadResult()" style="display: none;">
+                    ⬇️ Download
+                </button>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                Powered by <a href="https://huggingface.co/black-forest-labs/FLUX.2-klein-9B" target="_blank">FLUX.2 [klein] 9B</a> from Black Forest Labs
+            </p>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // State
+        let personImage = null;
+        let garmentImage = null;
+        let resultImage = null;
+        let isGenerating = false;
+
+        // Toast notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <span>${message}</span>
+            `;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Check server connection
+        async function checkConnection() {
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const gpuInfo = document.getElementById('gpuInfo');
+            
+            indicator.className = 'status-indicator status-checking';
+            statusText.textContent = 'Checking...';
+            
+            try {
+                const response = await fetch(`${serverUrl}/health`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    indicator.className = 'status-indicator status-connected';
+                    statusText.textContent = data.model_loaded ? 'Connected (Model Ready)' : 'Connected (Model Loading...)';
+                    
+                    // Show GPU info
+                    gpuInfo.style.display = 'block';
+                    document.getElementById('gpuName').textContent = data.gpu_name || 'N/A';
+                    document.getElementById('gpuMemTotal').textContent = data.gpu_memory_total || 'N/A';
+                    document.getElementById('modelLoaded').textContent = data.model_loaded ? 'Yes ✓' : 'No (Loading...)';
+                    
+                    showToast('Connected to server successfully!', 'success');
+                } else {
+                    throw new Error('Server returned error');
+                }
+            } catch (error) {
+                indicator.className = 'status-indicator status-disconnected';
+                statusText.textContent = 'Disconnected';
+                gpuInfo.style.display = 'none';
+                showToast(`Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle image upload
+        function handleImageUpload(input, type) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (!file.type.startsWith('image/')) {
+                showToast('Please upload an image file', 'error');
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('Image size must be less than 10MB', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64 = e.target.result;
+                
+                if (type === 'person') {
+                    personImage = base64;
+                    updatePreview('person', base64, file.name);
+                } else {
+                    garmentImage = base64;
+                    updatePreview('garment', base64, file.name);
+                }
+                
+                showToast(`${type === 'person' ? 'Person' : 'Garment'} image uploaded`, 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Update preview
+        function updatePreview(type, base64, filename) {
+            const zone = document.getElementById(`${type}Zone`);
+            const content = document.getElementById(`${type}Content`);
+            
+            zone.classList.add('has-image');
+            content.innerHTML = `
+                <img src="${base64}" class="preview-image" alt="${type}">
+                <div class="image-overlay">
+                    <span class="image-info">${filename}</span>
+                    <button class="btn btn-remove" onclick="event.stopPropagation(); removeImage('${type}')">Remove</button>
+                </div>
+            `;
+        }
+
+        // Remove image
+        function removeImage(type) {
+            const zone = document.getElementById(`${type}Zone`);
+            const content = document.getElementById(`${type}Content`);
+            const input = document.getElementById(`${type}Input`);
+            
+            if (type === 'person') {
+                personImage = null;
+                content.innerHTML = `
+                    <div class="upload-icon">📷</div>
+                    <p class="upload-text">
+                        <strong>Click to upload</strong> or drag and drop<br>
+                        PNG, JPG up to 10MB
+                    </p>
+                `;
+            } else {
+                garmentImage = null;
+                content.innerHTML = `
+                    <div class="upload-icon">👔</div>
+                    <p class="upload-text">
+                        <strong>Click to upload</strong> or drag and drop<br>
+                        PNG, JPG up to 10MB
+                    </p>
+                `;
+            }
+            
+            zone.classList.remove('has-image');
+            input.value = '';
+        }
+
+        // Generate try-on
+        async function generateTryOn() {
+            if (!personImage || !garmentImage) {
+                showToast('Please upload both person and garment images', 'error');
+                return;
+            }
+            
+            if (isGenerating) return;
+            
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            const generateBtn = document.getElementById('generateBtn');
+            const resultZone = document.getElementById('resultZone');
+            
+            isGenerating = true;
+            generateBtn.disabled = true;
+            generateBtn.textContent = '⏳ Generating...';
+            
+            // Show loading overlay
+            resultZone.innerHTML = `
+                <div class="loading-overlay">
+                    <div class="spinner"></div>
+                    <p class="loading-text">Generating try-on image...</p>
+                </div>
+            `;
+            
+            try {
+                const payload = {
+                    person_image: personImage,
+                    garment_image: garmentImage,
+                    prompt: document.getElementById('prompt').value,
+                    num_inference_steps: parseInt(document.getElementById('steps').value),
+                    guidance_scale: parseFloat(document.getElementById('guidance').value),
+                    width: parseInt(document.getElementById('width').value),
+                    height: parseInt(document.getElementById('height').value)
+                };
+                
+                const seedValue = document.getElementById('seed').value;
+                if (seedValue) {
+                    payload.seed = parseInt(seedValue);
+                }
+                
+                const response = await fetch(`${serverUrl}/tryon`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Generation failed');
+                }
+                
+                const data = await response.json();
+                resultImage = data.result_image;
+                
+                // Show result
+                resultZone.innerHTML = `<img src="${resultImage}" class="result-image" alt="Result">`;
+                document.getElementById('seedBadge').textContent = `Seed: ${data.seed_used}`;
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+                
+                showToast('Try-on generated successfully!', 'success');
+                
+            } catch (error) {
+                resultZone.innerHTML = `
+                    <div class="result-placeholder">
+                        <div class="icon">❌</div>
+                        <p>Generation failed: ${error.message}</p>
+                    </div>
+                `;
+                showToast(`Generation failed: ${error.message}`, 'error');
+            } finally {
+                isGenerating = false;
+                generateBtn.disabled = false;
+                generateBtn.textContent = '✨ Generate Try-On';
+            }
+        }
+
+        // Download result
+        function downloadResult() {
+            if (!resultImage) return;
+            
+            const link = document.createElement('a');
+            link.href = resultImage;
+            link.download = `tryon_result_${Date.now()}.png`;
+            link.click();
+            
+            showToast('Image downloaded!', 'success');
+        }
+
+        // Drag and drop handlers
+        ['personZone', 'garmentZone'].forEach(zoneId => {
+            const zone = document.getElementById(zoneId);
+            const type = zoneId.replace('Zone', '');
+            
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('dragover');
+            });
+            
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    const input = document.getElementById(`${type}Input`);
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    handleImageUpload(input, type);
+                }
+            });
+        });
+
+        // Auto-check connection on load
+        window.addEventListener('load', () => {
+            // Try to detect if running on vast.ai or similar
+            const currentHost = window.location.hostname;
+            if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                // Might be running on a remote server
+                document.getElementById('serverUrl').value = `http://${currentHost}:8000`;
+            }
+        });
+    </script>
+</body>
+</html>
